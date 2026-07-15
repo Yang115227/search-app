@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- 排除 Room 数据库（通过 Room 的 exportSchema 自行管理） -->
+    <exclude domain="database" path="quiz_database.db" />
+    <exclude domain="database" path="quiz_database.db-wal" />
+    <exclude domain="database" path="quiz_database.db-shm" />
+    <!-- 排除缓存文件 -->
+    <exclude domain="cache" path="." />
+    <!-- 排除 debug 截图 -->
+    <exclude domain="sharedpref" path="smartsearch_permission.xml" />
+</full-backup-content>

@@ -1,0 +1,45 @@
+# ── Gradle ──
+.gradle/
+build/
+!gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.properties
+
+# ── IDE ──
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+*.swp
+*.swo
+
+# ── Android ──
+local.properties
+*.apk
+*.aab
+*.ap_
+*.dex
+app/schemas/
+
+# ── OS ──
+.DS_Store
+Thumbs.db
+
+# ── 签名文件 ──
+*.keystore
+*.jks
+*.p12
+*.key
+!debug.keystore
+signing.properties
+
+# ── Debug 截图 ──
+app/src/main/assets/debug_capture/
+
+# ── 日志 ──
+*.log
+
+# ── 临时文件 ──
+*.tmp
+*.bak
+*.orig

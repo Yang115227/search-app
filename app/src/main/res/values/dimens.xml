@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- ============================================ -->
+    <!-- 悬浮球尺寸                                              -->
+    <!-- ============================================ -->
+    <dimen name="floating_ball_size">52dp</dimen>
+    <dimen name="floating_ball_margin">16dp</dimen>
+
+    <!-- ============================================ -->
+    <!-- 选题框尺寸                                              -->
+    <!-- ============================================ -->
+    <!-- 选区初始宽度（占屏幕比例由代码计算） -->
+    <dimen name="select_overlay_border_width">2dp</dimen>
+    <dimen name="select_overlay_corner_length">16dp</dimen>
+    <!-- 关闭按钮 -->
+    <dimen name="select_overlay_close_radius">22dp</dimen>
+    <dimen name="select_overlay_close_cross">8dp</dimen>
+    <dimen name="select_overlay_close_stroke">2.5dp</dimen>
+    <!-- 缩放控制点 -->
+    <dimen name="select_overlay_resize_size">36dp</dimen>
+    <dimen name="select_overlay_resize_line">18dp</dimen>
+    <dimen name="select_overlay_resize_stroke">3dp</dimen>
+    <!-- 选区最小尺寸 -->
+    <dimen name="select_overlay_min_size">80dp</dimen>
+    <!-- 触摸热区扩大 -->
+    <dimen name="select_overlay_touch_slop">12dp</dimen>
+
+    <!-- ============================================ -->
+    <!-- 答案弹窗尺寸                                              -->
+    <!-- ============================================ -->
+    <dimen name="answer_window_width">300dp</dimen>
+    <dimen name="answer_window_min_height">150dp</dimen>
+    <dimen name="answer_window_max_height">400dp</dimen>
+    <dimen name="answer_window_border_width">3dp</dimen>
+    <dimen name="answer_window_corner_radius">12dp</dimen>
+    <dimen name="answer_window_title_bar_height">40dp</dimen>
+    <dimen name="answer_window_padding">16dp</dimen>
+    <!-- 返回按钮 -->
+    <dimen name="answer_window_back_radius">14dp</dimen>
+    <dimen name="answer_window_back_arrow">6dp</dimen>
+    <dimen name="answer_window_back_stroke">2.5dp</dimen>
+    <!-- 缩放控制点 -->
+    <dimen name="answer_window_resize_size">36dp</dimen>
+    <dimen name="answer_window_resize_line">18dp</dimen>
+    <dimen name="answer_window_resize_stroke">3dp</dimen>
+    <!-- 最小缩放尺寸 -->
+    <dimen name="answer_window_min_resize_width">200dp</dimen>
+    <dimen name="answer_window_min_resize_height">100dp</dimen>
+    <!-- 触摸热区 -->
+    <dimen name="answer_window_touch_slop">12dp</dimen>
+
+    <!-- ============================================ -->
+    <!-- 首页尺寸                                              -->
+    <!-- ============================================ -->
+    <dimen name="home_padding">16dp</dimen>
+    <dimen name="home_card_corner">12dp</dimen>
+    <dimen name="home_card_elevation">2dp</dimen>
+    <dimen name="home_button_height">52dp</dimen>
+    <dimen name="home_outlined_button_height">48dp</dimen>
+    <dimen name="home_title_size">28sp</dimen>
+    <dimen name="home_subtitle_size">14sp</dimen>
+    <dimen name="home_section_title_size">16sp</dimen>
+    <dimen name="home_permission_text_size">14sp</dimen>
+    <dimen name="home_permission_status_size">13sp</dimen>
+    <dimen name="home_button_text_size">16sp</dimen>
+    <dimen name="home_card_title_size">14sp</dimen>
+    <dimen name="home_card_subtitle_size">11sp</dimen>
+
+    <!-- ============================================ -->
+    <!-- 通用间距                                              -->
+    <!-- ============================================ -->
+    <dimen name="spacing_xs">4dp</dimen>
+    <dimen name="spacing_sm">8dp</dimen>
+    <dimen name="spacing_md">12dp</dimen>
+    <dimen name="spacing_lg">16dp</dimen>
+    <dimen name="spacing_xl">24dp</dimen>
+    <dimen name="spacing_xxl">32dp</dimen>
+</resources>

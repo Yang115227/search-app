@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- ============================================ -->
+    <!-- 应用基础信息                                              -->
+    <!-- ============================================ -->
+    <string name="app_name">智能搜题</string>
+    <string name="app_description">悬浮窗搜题 · 无障碍识别 · OCR 拍照</string>
+
+    <!-- ============================================ -->
+    <!-- 无障碍服务                                              -->
+    <!-- ============================================ -->
+    <string name="accessibility_service_description">
+        智能搜题无障碍服务，用于自动识别屏幕上的题目文字并匹配答案。
+        开启后，点击悬浮球即可框选搜题区域，服务将自动提取文字并显示答案。
+        本服务不会收集或上传任何个人信息。
+    </string>
+    <string name="accessibility_not_enabled">无障碍服务未开启</string>
+    <string name="accessibility_guide">请在「设置 → 无障碍 → 智能搜题」中开启无障碍服务</string>
+
+    <!-- ============================================ -->
+    <!-- 悬浮窗提示                                              -->
+    <!-- ============================================ -->
+    <string name="floating_window_notification_title">智能搜题运行中</string>
+    <string name="floating_window_notification_text">点击悬浮球开始搜题</string>
+    <string name="floating_ball_started">悬浮球已启动，点击悬浮球开始搜题</string>
+    <string name="floating_window_permission_required">请先授予悬浮窗权限</string>
+
+    <!-- ============================================ -->
+    <!-- 录屏服务提示                                              -->
+    <!-- ============================================ -->
+    <string name="screen_capture_notification_title">录屏搜题运行中</string>
+    <string name="screen_capture_notification_text">正在识别屏幕内容…</string>
+    <string name="screen_capture_permission_required">请先授权录屏权限</string>
+    <string name="screen_capture_started">录屏模式已启动，请框选题目区域</string>
+    <string name="screen_capture_denied">录屏权限未授权，已保持无障碍模式</string>
+    <string name="screen_capture_secure_page">当前页面无法截屏</string>
+    <string name="screen_capture_secure_page_detail">检测到页面启用了防截屏保护（FLAG_SECURE），已自动切换到无障碍模式，请重新选题。</string>
+    <string name="screen_capture_switched">录屏模式已停止</string>
+    <string name="screen_capture_switched_detail">原因：录屏权限被回收或页面不支持截屏。\n\n请开启无障碍服务后继续使用搜题功能。\n设置路径：设置 → 无障碍 → 智能搜题</string>
+
+    <!-- ============================================ -->
+    <!-- 权限引导文案                                              -->
+    <!-- ============================================ -->
+    <string name="permission_guide_title">权限设置</string>
+    <string name="permission_guide_subtitle">搜题功能需要以下权限</string>
+    <string name="permission_floating_window">悬浮窗</string>
+    <string name="permission_floating_window_desc">用于在屏幕上显示选题框和答案弹窗</string>
+    <string name="permission_accessibility">无障碍</string>
+    <string name="permission_accessibility_desc">用于自动读取屏幕上的文字内容</string>
+    <string name="permission_screen_capture">录屏</string>
+    <string name="permission_screen_capture_desc">用于截取屏幕画面进行 OCR 识别</string>
+    <string name="permission_camera">相机</string>
+    <string name="permission_camera_desc">备用方案：拍照识别题目</string>
+    <string name="permission_go_settings">前往设置</string>
+    <string name="permission_granted">✓ 已授权</string>
+    <string name="permission_denied">✗ 未授权</string>
+    <string name="permission_not_applicable">— 不可用</string>
+
+    <!-- ============================================ -->
+    <!-- 首页按钮文字                                              -->
+    <!-- ============================================ -->
+    <string name="btn_accessibility_search">无障碍搜题（推荐）</string>
+    <string name="btn_screen_capture_search">录屏搜题（OCR 识别）</string>
+    <string name="btn_import_questions">题库导入</string>
+    <string name="btn_wrong_book">错题本</string>
+    <string name="btn_practice">练习</string>
+    <string name="btn_switch_to_screen_capture">切换到录屏模式</string>
+
+    <!-- ============================================ -->
+    <!-- 搜题结果弹窗                                              -->
+    <!-- ============================================ -->
+    <string name="answer_title">答案</string>
+    <string name="explanation_title">解析</string>
+    <string name="answer_not_found">未找到匹配的题目</string>
+    <string name="answer_not_found_detail">未找到匹配的题目，请确认题库已导入相关内容。</string>
+    <string name="answer_empty_result">未能识别选题区域内的文字内容</string>
+    <string name="answer_empty_result_accessibility">可能原因：\n1. 当前页面为图片/视频，无法提取文字\n2. 应用禁用了无障碍访问\n3. 选区范围未覆盖有效文字\n\n请尝试以下操作：\n• 重新选题：调整选区范围后重试\n• 切换到录屏模式：通过 OCR 识别图片中的文字\n\n切换路径：\n悬浮球长按 → 切换录屏模式 → 授权录屏 → 重新选题</string>
+    <string name="answer_empty_result_ocr">未识别到文字内容</string>
+    <string name="answer_empty_result_ocr_detail">所选区域内未检测到文字。\n\n可能原因：\n1. 选区未覆盖有效文字区域\n2. 文字颜色与背景对比度不足\n3. 页面使用了特殊字体\n\n建议：重新选题或切换到无障碍模式。</string>
+    <string name="answer_ocr_failure">OCR 识别失败</string>
+    <string name="answer_ocr_failure_detail">建议切换到无障碍模式重试。</string>
+
+    <!-- ============================================ -->
+    <!-- 题库导入                                              -->
+    <!-- ============================================ -->
+    <string name="import_file_not_supported">文件格式不支持，请使用 .xlsx 或 .xls 格式</string>
+    <string name="import_file_empty">工作表为空，没有数据行</string>
+    <string name="import_success">成功导入 %d 条题目</string>
+    <string name="import_no_data">未解析到有效题目数据，请检查 Excel 格式</string>
+    <string name="import_file_permission">文件读取权限不足，请重新选择文件</string>
+
+    <!-- ============================================ -->
+    <!-- 通用                                              -->
+    <!-- ============================================ -->
+    <string name="cancel">取消</string>
+    <string name="confirm">确定</string>
+    <string name="close">关闭</string>
+    <string name="back">返回</string>
+    <string name="retry">重试</string>
+    <string name="loading">加载中…</string>
+</resources>

@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- ============================================ -->
+    <!-- 主色调                                              -->
+    <!-- ============================================ -->
+
+    <!-- 品牌绿色 -->
+    <color name="color_primary">#4CAF50</color>
+    <color name="color_primary_dark">#388E3C</color>
+    <color name="color_primary_light">#C8E6C9</color>
+    <color name="color_accent">#FF9800</color>
+
+    <!-- ============================================ -->
+    <!-- 悬浮窗配色                                              -->
+    <!-- ============================================ -->
+
+    <!-- 选题框遮罩 -->
+    <color name="select_overlay_mask">#80000000</color>
+    <!-- 选题框选区边框 -->
+    <color name="select_overlay_border">#FFFFFF</color>
+    <!-- 选题框四角高亮 -->
+    <color name="select_overlay_corner">#FFFFFF</color>
+    <!-- 选题框 X 关闭按钮背景 -->
+    <color name="select_overlay_close_bg">#C8000000</color>
+    <!-- 选题框 X 关闭按钮线条 -->
+    <color name="select_overlay_close_line">#FFFFFF</color>
+    <!-- 选题框缩放控制点 -->
+    <color name="select_overlay_resize">#FFFFFF</color>
+
+    <!-- 答案弹窗外边框 -->
+    <color name="answer_window_border">#4CAF50</color>
+    <!-- 答案弹窗内容背景 -->
+    <color name="answer_window_bg">#FFFFFF</color>
+    <!-- 答案弹窗标题栏分割线 -->
+    <color name="answer_window_divider">#E0E0E0</color>
+    <!-- 答案弹窗返回按钮背景 -->
+    <color name="answer_window_back_bg">#1E000000</color>
+    <!-- 答案弹窗返回箭头 -->
+    <color name="answer_window_back_arrow">#555555</color>
+    <!-- 答案弹窗缩放控制点 -->
+    <color name="answer_window_resize">#CCCCCC</color>
+
+    <!-- 悬浮球背景 -->
+    <color name="floating_ball_bg">#CC4CAF50</color>
+
+    <!-- ============================================ -->
+    <!-- 文字配色                                              -->
+    <!-- ============================================ -->
+
+    <!-- 标题文字 -->
+    <color name="text_title">#333333</color>
+    <!-- 答案文字 -->
+    <color name="text_answer">#1B5E20</color>
+    <!-- 解析文字 -->
+    <color name="text_explanation">#666666</color>
+    <!-- 提示文字 -->
+    <color name="text_hint">#999999</color>
+    <!-- 警告文字 -->
+    <color name="text_warning">#FF5722</color>
+
+    <!-- ============================================ -->
+    <!-- 权限状态配色                                              -->
+    <!-- ============================================ -->
+
+    <!-- 已授权 -->
+    <color name="permission_granted">#4CAF50</color>
+    <!-- 未授权 -->
+    <color name="permission_denied">#FF5722</color>
+    <!-- 不可用 -->
+    <color name="permission_not_applicable">#9E9E9E</color>
+
+    <!-- ============================================ -->
+    <!-- 页面背景                                              -->
+    <!-- ============================================ -->
+
+    <color name="background">#F5F5F5</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="on_surface">#333333</color>
+</resources>
