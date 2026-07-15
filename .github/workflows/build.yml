@@ -1,136 +1,50 @@
 name: SmartSearch CI Build
+
 on:
   push:
-    branches: [main, master]
-  pull_request:
-    branches: [main, master]
+    branches: [ main ]
   workflow_dispatch:
-    inputs:
-      build_type:
-        description: '构建类型'
-        required: true
-        default: 'both'
-        type: choice
-        options:
-          - debug
-          - release
-          - both
-env:
-  GRADLE_VERSION: "8.4"
-  ANDROID_COMPILE_SDK: "34"
-  ANDROID_BUILD_TOOLS: "34.0.0"
-  ANDROID_HOME: ${{ github.workspace }}/android-sdk
+
 jobs:
-  build:
-    name: Build APK
+  build_apk:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    env:
+      ANDROID_SDK_ROOT: ${{ github.workspace }}/android_sdk
+      JAVA_VERSION: 17
+
     steps:
-      # 1. 拉取代码
-      - name: Checkout
+      - name: 拉取项目源码
         uses: actions/checkout@v4
 
-      # 2. JDK17
-      - name: Setup JDK 17
+      - name: 配置JDK17
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
-          distribution: 'temurin'
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: temurin
 
-      # 3. Gradle阿里云镜像加速
-      - name: Config Gradle Aliyun Mirror
+      - name: 下载 Android CommandLineTools
+        run: wget https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O commandlinetools.zip
+
+      - name: 解压并配置SDK工具目录
         run: |
-          echo "dependencyResolutionManagement {
-              repositories {
-                  maven { url 'https://maven.aliyun.com/repository/google' }
-                  maven { url 'https://maven.aliyun.com/repository/public' }
-                  maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
-                  google()
-                  mavenCentral()
-              }
-          }" > settings.gradle
+          unzip commandlinetools.zip
+          mkdir -p $ANDROID_SDK_ROOT/cmdline-tools
+          mv cmdline-tools $ANDROID_SDK_ROOT/cmdline-tools/latest
+          ls $ANDROID_SDK_ROOT/cmdline-tools/latest/bin
 
-      # ======================
-      # 手动安装Android SDK，删除ghproxy，直接谷歌官方地址
-      # ======================
-      - name: Install Android SDK Manually
+      # 修复许可证报错：使用yes自动确认，移除EOF块
+      - name: 接受SDK许可
+        run: yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses
+
+      - name: 安装编译依赖SDK
         run: |
-          mkdir -p $ANDROID_HOME/cmdline-tools
-          cd $ANDROID_HOME/cmdline-tools
-          # 直接谷歌官方下载链接，不再使用ghproxy
-          curl -L "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip" -o cmd.zip
-          unzip cmd.zip
-          mv cmd cmdline-tools/latest
-          rm cmd.zip
-          # 配置环境变量
-          echo "PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH" >> $GITHUB_ENV
-          # 接受协议安装SDK
-          yes | sdkmanager --licenses
-          sdkmanager "platforms;android-${{ env.ANDROID_COMPILE_SDK }}" "build-tools;${{ env.ANDROID_BUILD_TOOLS }}" "platform-tools"
+          $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager "platforms;android-34" "build-tools;34.0.0"
 
-      # 4. Gradle Wrapper 直链下载
-      - name: Setup Gradle Wrapper
-        run: |
-          WRAPPER_JAR="gradle/wrapper/gradle-wrapper.jar"
-          WRAPPER_URL="https://raw.githubusercontent.com/gradle/gradle/v${GRADLE_VERSION}.0/gradle/wrapper/gradle-wrapper.jar"
-          if [ ! -f "$WRAPPER_JAR" ]; then
-            mkdir -p gradle/wrapper
-            curl -sSL "$WRAPPER_URL" -o "$WRAPPER_JAR"
-          fi
-          chmod +x ./gradlew
+      - name: 执行Gradle打包
+        run: ./gradlew assembleRelease
 
-      # 5. 生成本地签名密钥
-      - name: Generate Keystore
-        run: |
-          keytool -genkey -v \
-            -keystore smartsearch.keystore \
-            -alias smartsearch \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000 \
-            -storepass android \
-            -keypass android \
-            -dname "CN=SmartSearch, OU=CI, O=SmartSearch, L=Beijing, ST=Beijing, C=CN"
-          cat > signing.properties << 'EOF'
-          storeFile=smartsearch.keystore
-          storePassword=android
-          keyAlias=smartsearch
-          keyPassword=android
-          EOF
-
-      # 6. 缓存Gradle+SDK
-      - name: Cache Gradle & Android SDK
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-            ${{ env.ANDROID_HOME }}
-          key: android-build-${{ runner.os }}-${{ hashFiles('**/*.gradle.kts') }}
-          restore-keys: |
-            android-build-${{ runner.os }}-
-
-      # 7. 编译Debug
-      - name: Build Debug APK
-        if: ${{ github.event.inputs.build_type != 'release' }}
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
-
-      # 8. 编译Release
-      - name: Build Release APK
-        if: ${{ github.event.inputs.build_type != 'debug' }}
-        run: ./gradlew assembleRelease --no-daemon --stacktrace
-
-      # 9. 上传产物
-      - name: Upload Debug APK
-        if: always()
+      - name: 上传APK产物
         uses: actions/upload-artifact@v4
         with:
-          name: debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
-
-      - name: Upload Release APK
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-apk
-          path: app/build/outputs/apk/release/app-release.apk
+          name: 离线搜题安装包
+          path: app/build/outputs/apk/release/*.apk
