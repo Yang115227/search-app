@@ -17,15 +17,14 @@ jobs:
           java-version: '17'
           distribution: temurin
 
-      # 预装系统全局Gradle 8.13
-      - name: 安装Gradle
+      - name: 安装全局Gradle 8.13
         uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: "8.13"
 
-      # 直接全局gradle编译，不依赖项目内gradlew
+      # 增加--stacktrace打印完整报错堆栈
       - name: 编译Release包
-        run: gradle assembleRelease
+        run: gradle assembleRelease --stacktrace --info
 
       - name: 上传APK
         uses: actions/upload-artifact@v4
