@@ -1,4 +1,4 @@
-name: Android APK Build
+name: APK打包
 on:
   push:
     branches: [ main ]
@@ -8,28 +8,27 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout source code
+      - name: 拉取代码
         uses: actions/checkout@v4
 
-      # 官方一站式安卓环境，自动修复Gradle包装
-      - name: Setup Android
-        uses: android-actions/setup-android@v3
+      - name: 配置JDK17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: temurin
 
-      # 自动补全gradlew权限
-      - name: Fix gradlew permission
-        run: |
-          if [ ! -f "./gradlew" ]; then
-            gradle wrapper --gradle-version=8.13
-          fi
-          chmod +x gradlew
+      # 预装系统全局Gradle 8.13
+      - name: 安装Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: "8.13"
 
-      # 编译正式安装包
-      - name: Build Release APK
-        run: ./gradlew assembleRelease
+      # 直接全局gradle编译，不依赖项目内gradlew
+      - name: 编译Release包
+        run: gradle assembleRelease
 
-      # 打包文件上传
-      - name: Upload APK
+      - name: 上传APK
         uses: actions/upload-artifact@v4
         with:
-          name: App_Release
+          name: 搜题APP安装包
           path: app/build/outputs/apk/release/*.apk
