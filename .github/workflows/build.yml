@@ -22,6 +22,14 @@ jobs:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: temurin
 
+      # 新增：自动生成gradlew脚本，彻底解决文件缺失
+      - name: 生成Gradle包装脚本
+        run: gradle wrapper
+
+      # 赋予脚本执行权限（Linux必须）
+      - name: 授权gradlew执行权限
+        run: chmod +x gradlew
+
       - name: 下载 Android CommandLineTools
         run: wget https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O commandlinetools.zip
 
@@ -32,7 +40,6 @@ jobs:
           mv cmdline-tools $ANDROID_SDK_ROOT/cmdline-tools/latest
           ls $ANDROID_SDK_ROOT/cmdline-tools/latest/bin
 
-      # 修复许可证报错：使用yes自动确认，移除EOF块
       - name: 接受SDK许可
         run: yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses
 
