@@ -25,7 +25,15 @@ jobs:
 
       # 完整堆栈日志，方便排查代码报错
       - name: 编译Release包
-        run: gradle assembleRelease --stacktrace --info
+        run: |
+         # 清理缓存
+          rm -rf ~/.gradle/caches ./.gradle app/build
+         # 写入gradle配置，不用EOF，不会报语法红线
+         echo "org.gradle.jvmargs=-Xmx4096m -Xms2048m" >> gradle.properties
+         echo "org.gradle.daemon=false" >> gradle.properties
+         echo "org.gradle.parallel=false" >> gradle.properties
+         # 完整打包命令
+            ./gradlew clean assembleRelease --stacktrace --info --no-daemon
 
       - name: 上传APK
         uses: actions/upload-artifact@v4
