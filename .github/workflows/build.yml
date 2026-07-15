@@ -16,14 +16,18 @@ jobs:
       - name: 拉取项目源码
         uses: actions/checkout@v4
 
-      # 官方Action自动配置JDK+Gradle，自动补全gradlew脚本
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+      - name: 配置JDK
+        uses: actions/setup-java@v4
         with:
-          gradle-version: 8.13
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: temurin
 
-      # 赋予脚本执行权限
-      - name: 授权gradlew
+      # 关键：强制生成gradle包装脚本，不存在也能创建
+      - name: 生成 gradlew 脚本
+        run: gradle wrapper --gradle-version=8.13
+
+      # 现在文件已经生成，可以授权权限
+      - name: 授权gradlew执行权限
         run: chmod +x gradlew
 
       - name: 下载 Android CommandLineTools
