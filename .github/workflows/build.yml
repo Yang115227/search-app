@@ -1,59 +1,55 @@
-name: SmartSearch 自动打包
+name: SmartSearch打包
 on:
-  push:
-    branches: [ main ]
+  push: [main]
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      JAVA_VERSION: 17
-      ANDROID_SDK_ROOT: ${{ github.workspace }}/android-sdk
-
+      JAVA_HOME: ${{ steps.java.outputs.java-home }}
     steps:
-      # 1. 拉取完整源码
-      - name: Checkout code
+      - name: 拉取源码
         uses: actions/checkout@v4
 
-      # 2. 安装JDK17
-      - name: Setup JDK 17
+      - name: 配置JDK17
+        id: java
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
-          distribution: 'temurin'
+          java-version: 17
+          distribution: temurin
 
-      # 3. 生成缺失的 gradlew 脚本（关键修复步骤）
-      - name: Generate Gradle wrapper
-        run: gradle wrapper --gradle-version 8.13
-
-      # 4. 赋予执行权限
-      - name: Grant execute permission
-        run: chmod +x gradlew
-
-      # 5. 下载Android SDK命令行工具
-      - name: Download Android SDK Tools
+      # 自动下载完整官方gradlew，修复缺失/损坏wrapper
+      - name: Fix Gradle Wrapper
         run: |
-          mkdir -p $ANDROID_SDK_ROOT/cmdline-tools
-          wget https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmd.zip
-          unzip cmd.zip -d $ANDROID_SDK_ROOT/cmdline-tools
-          mv $ANDROID_SDK_ROOT/cmdline-tools/cmdline-tools $ANDROID_SDK_ROOT/cmdline-tools/latest
+          wget https://services.gradle.org/distributions/gradle-8.13-all.zip -O gradle.zip
+          mkdir temp_gradle
+          unzip gradle.zip -d temp_gradle
+          cp temp_gradle/gradle-8.13/gradlew ./
+          cp -r temp_gradle/gradle-8.13/gradle/wrapper ./gradle/
+          chmod +x gradlew
 
-      # 6. 同意SDK协议并安装编译组件
-      - name: Install SDK components
+      # 安装安卓SDK
+      - name: Install Android SDK
         run: |
-          yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses
-          $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager "platforms;android-34" "build-tools;34.0.0"
+          mkdir -p ~/android-sdk/cmdline-tools/latest
+          wget https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O sdk.zip
+          unzip sdk.zip -d ~/android-sdk/cmdline-tools/latest
+          export PATH=$PATH:~/android-sdk/cmdline-tools/latest/bin
+          yes | sdkmanager --licenses
+          sdkmanager "platforms;android-34" "build-tools;34.0.0"
+        env:
+          ANDROID_SDK_ROOT: ~/android-sdk
 
-      # 7. 编译Release APK
-      - name: Build Release APK
+      # 编译Release包
+      - name: Build APK
         run: ./gradlew assembleRelease
         env:
-          ANDROID_HOME: ${{ env.ANDROID_SDK_ROOT }}
+          ANDROID_SDK_ROOT: ~/android-sdk
 
-      # 8. 上传安装包
-      - name: Upload APK Artifact
+      # 上传安装包
+      - name: 导出APK
         uses: actions/upload-artifact@v4
         with:
-          name: SmartSearch_Release_APK
+          name: 搜题APP安装包
           path: app/build/outputs/apk/release/*.apk
