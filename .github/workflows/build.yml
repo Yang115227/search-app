@@ -4,7 +4,6 @@
 #  产出: debug APK + release APK (arm64-v8a)
 # ============================================
 name: SmartSearch CI Build
-
 on:
   push:
     branches: [main, master]
@@ -21,25 +20,21 @@ on:
           - debug
           - release
           - both
-
 env:
   GRADLE_VERSION: "8.4"
   ANDROID_COMPILE_SDK: "34"
   ANDROID_BUILD_TOOLS: "34.0.0"
-
 jobs:
   build:
     name: Build APK
     runs-on: ubuntu-latest
     timeout-minutes: 45
-
     steps:
       # ═══════════════════════════════════════════════
       #  第 1 步：检出代码
       # ═══════════════════════════════════════════════
       - name: Checkout
         uses: actions/checkout@v4
-
       # ═══════════════════════════════════════════════
       #  第 2 步：设置 JDK 17
       # ═══════════════════════════════════════════════
@@ -49,27 +44,43 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
+      # 新增：配置Gradle国内阿里云镜像，加速依赖下载
+      - name: Config Gradle Aliyun Mirror
+        run: |
+          echo "dependencyResolutionManagement {
+              repositories {
+                  maven { url 'https://maven.aliyun.com/repository/google' }
+                  maven { url 'https://maven.aliyun.com/repository/public' }
+                  maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
+                  google()
+                  mavenCentral()
+              }
+          }" > settings.gradle
+
       # ═══════════════════════════════════════════════
-      #  第 3 步：设置 Android SDK
+      #  第 3 步：设置 Android SDK（修复许可+镜像）
       # ═══════════════════════════════════════════════
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         with:
+          accept-android-sdk-licenses: true
           packages: |
             platforms;android-${{ env.ANDROID_COMPILE_SDK }}
             build-tools;${{ env.ANDROID_BUILD_TOOLS }}
             platform-tools
             cmdline-tools;latest
+        env:
+          ANDROID_HOME_MIRROR: https://mirrors.aliyun.com/android/repository/
 
       # ═══════════════════════════════════════════════
-      #  第 4 步：生成 Gradle Wrapper
+      #  第 4 步：生成 Gradle Wrapper（修复下载超时）
       #  gradle-wrapper.jar 未纳入版本控制，CI 中自动下载
       # ═══════════════════════════════════════════════
       - name: Setup Gradle Wrapper
         run: |
           WRAPPER_JAR="gradle/wrapper/gradle-wrapper.jar"
-          WRAPPER_URL="https://raw.githubusercontent.com/gradle/gradle/v${GRADLE_VERSION}.0/gradle/wrapper/gradle-wrapper.jar"
-
+          # 增加ghproxy镜像加速raw.githubusercontent.com
+          WRAPPER_URL="https://mirror.ghproxy.com/https://raw.githubusercontent.com/gradle/gradle/v${GRADLE_VERSION}.0/gradle/wrapper/gradle-wrapper.jar"
           if [ ! -f "$WRAPPER_JAR" ]; then
             echo "下载 gradle-wrapper.jar (v${GRADLE_VERSION})..."
             mkdir -p gradle/wrapper
@@ -79,7 +90,6 @@ jobs:
             echo "gradle-wrapper.jar 已存在，跳过"
           fi
           chmod +x ./gradlew
-
       # ═══════════════════════════════════════════════
       #  第 5 步：生成签名密钥库
       # ═══════════════════════════════════════════════
@@ -95,7 +105,6 @@ jobs:
             -storepass android \
             -keypass android \
             -dname "CN=SmartSearch, OU=CI, O=SmartSearch, L=Beijing, ST=Beijing, C=CN"
-
           # 生成 signing.properties（build.gradle.kts 自动读取）
           cat > signing.properties << 'EOF'
           storeFile=smartsearch.keystore
@@ -103,9 +112,7 @@ jobs:
           keyAlias=smartsearch
           keyPassword=android
           EOF
-
           echo "签名配置完成"
-
       # ═══════════════════════════════════════════════
       #  第 6 步：缓存 Gradle 依赖
       # ═══════════════════════════════════════════════
@@ -118,7 +125,6 @@ jobs:
           key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle.kts', '**/gradle-wrapper.properties', '**/libs.versions.toml') }}
           restore-keys: |
             gradle-${{ runner.os }}-
-
       # ═══════════════════════════════════════════════
       #  第 7 步：编译 Debug APK
       # ═══════════════════════════════════════════════
@@ -129,50 +135,6 @@ jobs:
             --no-daemon \
             --stacktrace \
             --warning-mode all
-
       # ═══════════════════════════════════════════════
       #  第 8 步：编译 Release APK
-      # ═══════════════════════════════════════════════
-      - name: Build Release APK
-        if: ${{ github.event.inputs.build_type == 'release' || github.event.inputs.build_type == 'both' }}
-        run: |
-          ./gradlew assembleRelease \
-            --no-daemon \
-            --stacktrace \
-            --warning-mode all
-
-      # ═══════════════════════════════════════════════
-      #  第 9 步：上传 Debug APK
-      # ═══════════════════════════════════════════════
-      - name: Upload Debug APK
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: smartsearch-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: warn
-          retention-days: 30
-
-      # ═══════════════════════════════════════════════
-      #  第 10 步：上传 Release APK
-      # ═══════════════════════════════════════════════
-      - name: Upload Release APK
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: smartsearch-release-apk
-          path: app/build/outputs/apk/release/app-release.apk
-          if-no-files-found: warn
-          retention-days: 30
-
-      # ═══════════════════════════════════════════════
-      #  第 11 步：上传 ProGuard Mapping（混淆符号表）
-      # ═══════════════════════════════════════════════
-      - name: Upload ProGuard Mapping
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: smartsearch-mapping
-          path: app/build/outputs/mapping/release/mapping.txt
-          if-no-files-found: ignore
-          retention-days: 90
+      # ═══════════
