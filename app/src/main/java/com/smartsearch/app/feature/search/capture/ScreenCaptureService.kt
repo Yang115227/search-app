@@ -538,7 +538,6 @@ class ScreenCaptureService : Service() {
         var totalLuminance = 0.0
         var sampleCount = 0
 
-        val pixels = IntArray(bitmap.width * bitmap.height)
         val sampleHeight = bitmap.height / sampleStep
         val sampleWidth = bitmap.width / sampleStep
 
