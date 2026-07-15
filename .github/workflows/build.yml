@@ -51,44 +51,35 @@ jobs:
           }" > settings.gradle
 
       # ======================
-      # 【核心替换】手动安装Android SDK，使用清华镜像，彻底避开setup-android插件报错
+      # 手动安装Android SDK，删除ghproxy，直接谷歌官方地址
       # ======================
-      - name: Install Android SDK Manually (清华镜像)
+      - name: Install Android SDK Manually
         run: |
-          # 1. 创建SDK目录
           mkdir -p $ANDROID_HOME/cmdline-tools
           cd $ANDROID_HOME/cmdline-tools
-          # 2. 国内镜像下载命令行工具（ghproxy加速谷歌下载地址）
-          curl -L "https://mirror.ghproxy.com/https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip" -o cmd.zip
+          # 直接谷歌官方下载链接，不再使用ghproxy
+          curl -L "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip" -o cmd.zip
           unzip cmd.zip
-          mv cmdline-tools latest
+          mv cmd cmdline-tools/latest
           rm cmd.zip
-          # 3. 写入清华SDK镜像源，替换谷歌官方源
-          echo "sdk.manager.site=https://mirrors.tuna.tsinghua.edu.cn/android/repository/" > $ANDROID_HOME/source.properties
-          # 4. 添加环境变量
+          # 配置环境变量
           echo "PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH" >> $GITHUB_ENV
-          # 5. 接受协议并安装所需SDK组件
+          # 接受协议安装SDK
           yes | sdkmanager --licenses
           sdkmanager "platforms;android-${{ env.ANDROID_COMPILE_SDK }}" "build-tools;${{ env.ANDROID_BUILD_TOOLS }}" "platform-tools"
-          # 强制切换镜像下载源
-          sdkmanager --no_https --sdk_root=$ANDROID_HOME
 
-      # 5. Gradle Wrapper 国内镜像下载
+      # 4. Gradle Wrapper 直链下载
       - name: Setup Gradle Wrapper
         run: |
           WRAPPER_JAR="gradle/wrapper/gradle-wrapper.jar"
-          WRAPPER_URL="https://mirror.ghproxy.com/https://raw.githubusercontent.com/gradle/gradle/v${GRADLE_VERSION}.0/gradle/wrapper/gradle-wrapper.jar"
+          WRAPPER_URL="https://raw.githubusercontent.com/gradle/gradle/v${GRADLE_VERSION}.0/gradle/wrapper/gradle-wrapper.jar"
           if [ ! -f "$WRAPPER_JAR" ]; then
-            echo "下载 gradle-wrapper.jar (v${GRADLE_VERSION})..."
             mkdir -p gradle/wrapper
             curl -sSL "$WRAPPER_URL" -o "$WRAPPER_JAR"
-            echo "gradle-wrapper.jar 下载完成"
-          else
-            echo "gradle-wrapper.jar 已存在，跳过"
           fi
           chmod +x ./gradlew
 
-      # 6. 生成本地签名密钥
+      # 5. 生成本地签名密钥
       - name: Generate Keystore
         run: |
           keytool -genkey -v \
@@ -106,62 +97,40 @@ jobs:
           keyAlias=smartsearch
           keyPassword=android
           EOF
-          echo "签名配置完成"
 
-      # 7. Gradle缓存加速
-      - name: Cache Gradle
+      # 6. 缓存Gradle+SDK
+      - name: Cache Gradle & Android SDK
         uses: actions/cache@v4
         with:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
             ${{ env.ANDROID_HOME }}
-          key: gradle-android-sdk-${{ runner.os }}-${{ hashFiles('**/*.gradle.kts', '**/gradle-wrapper.properties', '**/libs.versions.toml') }}
+          key: android-build-${{ runner.os }}-${{ hashFiles('**/*.gradle.kts') }}
           restore-keys: |
-            gradle-android-sdk-${{ runner.os }}-
+            android-build-${{ runner.os }}-
 
-      # 8. 编译Debug包
+      # 7. 编译Debug
       - name: Build Debug APK
-        if: ${{ github.event.inputs.build_type == 'debug' || github.event.inputs.build_type == 'both' || github.event.inputs.build_type == '' }}
-        run: |
-          ./gradlew assembleDebug \
-            --no-daemon \
-            --stacktrace \
-            --warning-mode all
+        if: ${{ github.event.inputs.build_type != 'release' }}
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
 
-      # 9. 编译Release包
+      # 8. 编译Release
       - name: Build Release APK
-        if: ${{ github.event.inputs.build_type == 'release' || github.event.inputs.build_type == 'both' }}
-        run: |
-          ./gradlew assembleRelease \
-            --no-daemon \
-            --stacktrace \
-            --warning-mode all
+        if: ${{ github.event.inputs.build_type != 'debug' }}
+        run: ./gradlew assembleRelease --no-daemon --stacktrace
 
-      # 10. 上传产物
+      # 9. 上传产物
       - name: Upload Debug APK
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: smartsearch-debug-apk
+          name: debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: warn
-          retention-days: 30
 
       - name: Upload Release APK
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: smartsearch-release-apk
+          name: release-apk
           path: app/build/outputs/apk/release/app-release.apk
-          if-no-files-found: warn
-          retention-days: 30
-
-      - name: Upload ProGuard Mapping
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: smartsearch-mapping
-          path: app/build/outputs/mapping/release/mapping.txt
-          if-no-files-found: ignore
-          retention-days: 90
