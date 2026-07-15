@@ -16,42 +16,36 @@ jobs:
       - name: 拉取项目源码
         uses: actions/checkout@v4
 
-      - name: 配置JDK17
-        uses: actions/setup-java@v4
+      # 官方Action自动配置JDK+Gradle，自动补全gradlew脚本
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
         with:
-          java-version: ${{ env.JAVA_VERSION }}
-          distribution: temurin
+          gradle-version: 8.13
 
-      # 新增：自动生成gradlew脚本，彻底解决文件缺失
-      - name: 生成Gradle包装脚本
-        run: gradle wrapper
-
-      # 赋予脚本执行权限（Linux必须）
-      - name: 授权gradlew执行权限
+      # 赋予脚本执行权限
+      - name: 授权gradlew
         run: chmod +x gradlew
 
       - name: 下载 Android CommandLineTools
         run: wget https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O commandlinetools.zip
 
-      - name: 解压并配置SDK工具目录
+      - name: 解压配置SDK
         run: |
           unzip commandlinetools.zip
           mkdir -p $ANDROID_SDK_ROOT/cmdline-tools
           mv cmdline-tools $ANDROID_SDK_ROOT/cmdline-tools/latest
-          ls $ANDROID_SDK_ROOT/cmdline-tools/latest/bin
 
-      - name: 接受SDK许可
+      - name: 同意SDK许可证
         run: yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses
 
-      - name: 安装编译依赖SDK
-        run: |
-          $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager "platforms;android-34" "build-tools;34.0.0"
+      - name: 安装SDK编译工具
+        run: $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager "platforms;android-34" "build-tools;34.0.0"
 
-      - name: 执行Gradle打包
+      - name: 编译Release安装包
         run: ./gradlew assembleRelease
 
       - name: 上传APK产物
         uses: actions/upload-artifact@v4
         with:
-          name: 离线搜题安装包
+          name: 离线搜题APK
           path: app/build/outputs/apk/release/*.apk
