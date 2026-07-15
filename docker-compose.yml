@@ -1,0 +1,45 @@
+# ============================================
+# SmartSearch Docker Compose 配置
+# 用法:
+#   docker compose build    # 构建镜像
+#   docker compose run debug   # 编译 Debug APK
+#   docker compose run release # 编译 Release APK
+#   docker compose run shell   # 进入容器交互式环境
+# ============================================
+services:
+  base:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: smartsearch-builder:latest
+    volumes:
+      - .:/workspace
+      - gradle-cache:/root/.gradle/caches
+      - gradle-wrapper:/root/.gradle/wrapper
+    environment:
+      - CI=true
+      - GRADLE_OPTS=-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx4096m
+
+  debug:
+    extends:
+      service: base
+    command: ["./gradlew", "assembleDebug", "--no-daemon", "--stacktrace"]
+
+  release:
+    extends:
+      service: base
+    command: ["./gradlew", "assembleRelease", "--no-daemon", "--stacktrace"]
+
+  clean:
+    extends:
+      service: base
+    command: ["./gradlew", "clean", "--no-daemon"]
+
+  shell:
+    extends:
+      service: base
+    command: ["/bin/bash"]
+
+volumes:
+  gradle-cache:
+  gradle-wrapper:
