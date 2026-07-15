@@ -58,7 +58,7 @@ jobs:
           }" > settings.gradle
 
       # ═══════════════════════════════════════════════
-      #  第 3 步：设置 Android SDK（修复许可+镜像）
+      #  第 3 步：设置 Android SDK（修复核心：移除非法run参数）
       # ═══════════════════════════════════════════════
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
@@ -137,4 +137,44 @@ jobs:
             --warning-mode all
       # ═══════════════════════════════════════════════
       #  第 8 步：编译 Release APK
-      # ═══════════
+      # ═══════════════════════════════════════════════
+      - name: Build Release APK
+        if: ${{ github.event.inputs.build_type == 'release' || github.event.inputs.build_type == 'both' }}
+        run: |
+          ./gradlew assembleRelease \
+            --no-daemon \
+            --stacktrace \
+            --warning-mode all
+      # ═══════════════════════════════════════════════
+      #  第 9 步：上传 Debug APK
+      # ═══════════════════════════════════════════════
+      - name: Upload Debug APK
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smartsearch-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: warn
+          retention-days: 30
+      # ═══════════════════════════════════════════════
+      #  第 10 步：上传 Release APK
+      # ═══════════════════════════════════════════════
+      - name: Upload Release APK
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smartsearch-release-apk
+          path: app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: warn
+          retention-days: 30
+      # ═══════════════════════════════════════════════
+      #  第 11 步：上传 ProGuard Mapping（混淆符号表）
+      # ═══════════════════════════════════════════════
+      - name: Upload ProGuard Mapping
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smartsearch-mapping
+          path: app/build/outputs/mapping/release/mapping.txt
+          if-no-files-found: ignore
+          retention-days: 90
