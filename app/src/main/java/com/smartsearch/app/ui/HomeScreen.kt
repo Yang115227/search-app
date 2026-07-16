@@ -2,6 +2,7 @@ package com.smartsearch.app.ui
 
 import android.app.Activity
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
@@ -29,8 +30,12 @@ import androidx.lifecycle.LifecycleEventObserver
 import com.smartsearch.app.core.permission.PermissionManager
 import com.smartsearch.app.core.service.FloatingWindowService
 import com.smartsearch.app.core.service.FloatWindowManager
+import com.smartsearch.app.data.parser.ExcelImporter
 import com.smartsearch.app.feature.search.accessibility.AccessibilitySearchService
 import com.smartsearch.app.feature.search.capture.ScreenCaptureService
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 /**
  * 首页 —— 权限校验、悬浮球启动、模式切换的统一入口。
@@ -68,17 +73,26 @@ class HomeActivity : ComponentActivity() {
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK && result.data != null) {
             // 授权成功 → 启动录屏服务
-            // TODO: 修复 startWithProjection 的调用方式
-            // ScreenCaptureService.startWithProjection(
-            //     this,
-            //     result.data!!,
-            //     null // 选区由后续选题框回调传入
-            // )
+            ScreenCaptureService.startWithProjection(
+                this,
+                result.data!!,
+                null // 选区由后续选题框回调传入
+            )
             // 切换到录屏模式，显示选题框
             FloatWindowManager.showSelectOverlayForScreenCapture(this)
             Toast.makeText(this, "录屏模式已启动，请框选题目区域", Toast.LENGTH_SHORT).show()
         } else {
             Toast.makeText(this, "录屏权限未授权，已保持无障碍模式", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /** 文件选择器结果回调 */
+    private val filePickerLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK && result.data?.data != null) {
+            val uri: Uri = result.data!!.data!!
+            importExcelFile(uri)
         }
     }
 
@@ -156,21 +170,32 @@ class HomeActivity : ComponentActivity() {
      */
     private fun startAccessibilitySearch() {
         // 第 1 步：悬浮窗权限
-        if (PermissionManager.checkFloatingWindow(this) != PermissionManager.PermissionStatus.GRANTED) {
-            Toast.makeText(this, "请先授予悬浮窗权限", Toast.LENGTH_SHORT).show()
+        val floatingStatus = PermissionManager.checkFloatingWindow(this)
+        if (floatingStatus != PermissionManager.PermissionStatus.GRANTED) {
+            showPermissionGuide("floating_window")
             startActivity(PermissionManager.getFloatingWindowSettingsIntent(this))
             return
         }
 
         // 第 2 步：无障碍权限
         if (!AccessibilitySearchService.isServiceEnabled(this)) {
-            Toast.makeText(this, "请先开启无障碍服务", Toast.LENGTH_SHORT).show()
+            showPermissionGuide("accessibility")
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
             return
         }
 
         // 第 3 步：启动悬浮球服务
         startFloatingBallService()
+    }
+
+    /**
+     * 显示权限引导 Toast。
+     */
+    private fun showPermissionGuide(permissionName: String) {
+        val message = PermissionManager.getPermissionGuideMessage(permissionName)
+        // 分段显示：第一行作为 Toast 提示，完整引导文本用于后续对话框
+        val shortMessage = message.split("\n\n").firstOrNull() ?: message
+        Toast.makeText(this, shortMessage, Toast.LENGTH_LONG).show()
     }
 
     // ==================== 录屏搜题 ====================
@@ -184,18 +209,18 @@ class HomeActivity : ComponentActivity() {
      */
     private fun startScreenCaptureSearch() {
         // 第 1 步：悬浮窗权限
-        if (PermissionManager.checkFloatingWindow(this) != PermissionManager.PermissionStatus.GRANTED) {
-            Toast.makeText(this, "请先授予悬浮窗权限", Toast.LENGTH_SHORT).show()
+        val floatingStatus = PermissionManager.checkFloatingWindow(this)
+        if (floatingStatus != PermissionManager.PermissionStatus.GRANTED) {
+            showPermissionGuide("floating_window")
             startActivity(PermissionManager.getFloatingWindowSettingsIntent(this))
             return
         }
 
         // 第 2 步：启动录屏授权
-        // TODO: 修复 switchFromAccessibility 的调用方式
-        // ScreenCaptureService.switchFromAccessibility(this) { projectionIntent ->
-        //     // 启动系统录屏授权对话框
-        //     screenCaptureLauncher.launch(projectionIntent)
-        // }
+        ScreenCaptureService.switchFromAccessibility(this) { projectionIntent ->
+            // 启动系统录屏授权对话框
+            screenCaptureLauncher.launch(projectionIntent)
+        }
     }
 
     // ==================== 悬浮球服务 ====================
@@ -221,15 +246,39 @@ class HomeActivity : ComponentActivity() {
     private fun openFilePicker() {
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
-            // 使用 EXTRA_MIME_TYPES 同时支持 .xlsx 和 .xls，type 必须设为 */*
             type = "*/*"
             putExtra(Intent.EXTRA_MIME_TYPES, arrayOf(
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 "application/vnd.ms-excel"
             ))
         }
-        // TODO: 注册文件选择器回调，调用 ExcelImporter.importFromUri()
-        startActivity(intent)
+        filePickerLauncher.launch(intent)
+    }
+
+    /**
+     * 导入 Excel 文件到题库数据库。
+     */
+    private fun importExcelFile(uri: Uri) {
+        Toast.makeText(this, "正在导入题库，请稍候...", Toast.LENGTH_SHORT).show()
+        CoroutineScope(Dispatchers.Main).launch {
+            val result = ExcelImporter.importFromUri(this@HomeActivity, uri)
+            when (result) {
+                is ExcelImporter.ImportResult.Success -> {
+                    Toast.makeText(
+                        this@HomeActivity,
+                        "导入成功：${result.count} 条题目",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+                is ExcelImporter.ImportResult.Error -> {
+                    Toast.makeText(
+                        this@HomeActivity,
+                        "导入失败：${result.message}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }
     }
 }
 

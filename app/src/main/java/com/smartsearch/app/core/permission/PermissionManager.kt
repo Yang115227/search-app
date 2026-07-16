@@ -178,32 +178,29 @@ object PermissionManager {
      *
      * 因此本方法使用以下策略判断：
      * 1. 检查录屏前台 Service 是否正在运行（说明当前会话已授权）
-     * 2. 检查 SharedPreferences 中是否存储了有效的 MediaProjection Intent 数据
-     *    （应用内缓存，表示用户在本次会话中已授权过）
-     * 3. 如果均不满足，返回 DENIED，提示需要重新授权
-     *
-     * ## 版本适配
-     * - **Android 10~14**：MediaProjection API 行为一致，无破坏性变更
-     * - **Android 14**：增加了前台 Service 类型声明要求（`foregroundServiceType="mediaProjection"`）
+     * 2. 如果均不满足，返回 DENIED，提示需要重新授权
      *
      * @param context 上下文
      * @param screenCaptureServiceClassName 录屏 Service 全限定类名
      * @return [PermissionStatus]
      */
     fun checkScreenCapture(context: Context, screenCaptureServiceClassName: String): PermissionStatus {
-        // 策略 1：检查录屏前台 Service 是否正在运行
+        // 策略：检查录屏前台 Service 是否正在运行
         if (isServiceRunning(context, screenCaptureServiceClassName)) {
             return PermissionStatus.GRANTED
         }
-
-        // 策略 2：检查本地缓存（SharedPreferences 中的授权标记）
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val hasStoredIntent = prefs.getBoolean(KEY_SCREEN_CAPTURE_GRANTED, false)
-        if (hasStoredIntent) {
-            return PermissionStatus.GRANTED
-        }
-
         return PermissionStatus.DENIED
+    }
+
+    /**
+     * 获取录屏权限的引导文本。
+     */
+    fun getScreenCaptureGuideMessage(): String {
+        return "录屏权限需要每次使用前授权。\n\n" +
+                "点击「录屏搜题」按钮后，系统会弹出录屏授权对话框，\n" +
+                "请点击「立即开始」或「允许」即可。\n\n" +
+                "注意：部分 APP 页面启用了防截屏保护（FLAG_SECURE），\n" +
+                "录屏模式下将无法识别这些页面的内容。"
     }
 
     /**
@@ -335,6 +332,34 @@ object PermissionManager {
     }
 
     // ==================== 权限引导 ====================
+
+    /**
+     * 获取权限引导消息文本。
+     *
+     * @param permissionName 权限名（与 getAllPermissions 返回的 key 一致）
+     * @return 引导文本描述
+     */
+    fun getPermissionGuideMessage(permissionName: String): String {
+        return when (permissionName) {
+            "floating_window" -> "悬浮窗权限允许应用在其他应用上层显示悬浮球和搜题结果。\n\n" +
+                    "请前往：设置 → 应用管理 → 智能搜题 → 显示悬浮窗 → 允许"
+
+            "accessibility" -> "无障碍服务允许应用读取屏幕上的文字内容，实现自动搜题。\n\n" +
+                    "请前往：设置 → 无障碍 → 智能搜题 → 开启服务\n\n" +
+                    "注意：部分手机（小米、OPPO、vivo）需要在无障碍列表中手动开启开关。"
+
+            "screen_capture" -> "录屏权限允许应用截取屏幕画面，通过 OCR 识别后匹配题库。\n\n" +
+                    "点击「录屏搜题」按钮后，系统会弹出录屏授权对话框，\n" +
+                    "请点击「立即开始」或「允许」。\n\n" +
+                    "注意：每次重启应用后需要重新授权。"
+
+            "camera" -> "相机权限作为兜底方案，当无障碍和录屏均不可用时，\n" +
+                    "可通过拍照识别题目。\n\n" +
+                    "请前往：设置 → 应用管理 → 智能搜题 → 权限 → 相机 → 允许"
+
+            else -> "未知权限，请前往系统设置中检查应用权限。"
+        }
+    }
 
     /**
      * 按优先级顺序获取第一个缺失权限对应的设置页 Intent。

@@ -478,8 +478,7 @@ class AccessibilitySearchService : AccessibilityService() {
         onReadyToRequest: (Intent) -> Unit
     ) {
         // 确保 OCR 引擎已初始化
-        // TODO: 修复 switchFromAccessibility 的调用方式
-        // ScreenCaptureService.switchFromAccessibility(context, onReadyToRequest)
+        ScreenCaptureService.switchFromAccessibility(context, onReadyToRequest)
     }
 
     // ==================== 空结果处理 ====================

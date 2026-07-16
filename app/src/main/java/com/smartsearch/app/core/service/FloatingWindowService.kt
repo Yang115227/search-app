@@ -220,13 +220,10 @@ class FloatingWindowService : Service() {
     // ==================== 触摸事件处理 ====================
 
     private fun handleTouchEvent(event: MotionEvent): Boolean {
-        val rawX = event.rawX
-        val rawY = event.rawY
-
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
-                initialTouchX = rawX
-                initialTouchY = rawY
+                initialTouchX = event.rawX
+                initialTouchY = event.rawY
                 initialWindowX = windowParams?.x ?: 0
                 initialWindowY = windowParams?.y ?: 0
                 touchStartTime = System.currentTimeMillis()
@@ -235,35 +232,40 @@ class FloatingWindowService : Service() {
             }
 
             MotionEvent.ACTION_MOVE -> {
-                val dx = rawX - initialTouchX
-                val dy = rawY - initialTouchY
+                val dx = event.rawX - initialTouchX
+                val dy = event.rawY - initialTouchY
 
-                if (kotlin.math.abs(dx) > 10f || kotlin.math.abs(dy) > 10f) {
+                // 5px 死区阈值，防止微颤导致频繁位置更新
+                if (kotlin.math.abs(dx) > 5f || kotlin.math.abs(dy) > 5f) {
                     isDragging = true
                 }
 
                 if (isDragging && windowParams != null) {
                     windowParams?.x = (initialWindowX + dx).toInt()
                     windowParams?.y = (initialWindowY + dy).toInt()
-                    windowParams?.let { windowManager?.updateViewLayout(floatingBallView, it) }
+                    try {
+                        windowManager?.updateViewLayout(floatingBallView, windowParams)
+                    } catch (e: IllegalArgumentException) {
+                        // 视图已被移除
+                    }
                 }
                 return true
             }
 
             MotionEvent.ACTION_UP -> {
                 val elapsed = System.currentTimeMillis() - touchStartTime
-                val dx = rawX - initialTouchX
-                val dy = rawY - initialTouchY
+                val dx = event.rawX - initialTouchX
+                val dy = event.rawY - initialTouchY
                 val distance = kotlin.math.sqrt(dx * dx + dy * dy)
 
                 when {
                     // 长按超过 800ms → 关闭悬浮球
-                    elapsed > 800 && distance < 15f -> {
+                    elapsed > 800 && distance < 20f -> {
                         stopSelf()
                         FloatWindowManager.destroyAll()
                     }
                     // 点击（短按且未拖拽）→ 触发搜题
-                    !isDragging && elapsed < 500 && distance < 15f -> {
+                    !isDragging && elapsed < 500 && distance < 20f -> {
                         triggerSelectionSearch()
                     }
                     // 拖拽结束 → 吸附边缘
@@ -271,6 +273,8 @@ class FloatingWindowService : Service() {
                         snapToEdge()
                     }
                 }
+                // 重置拖拽状态，避免下次 UP 误触发
+                isDragging = false
                 return true
             }
 

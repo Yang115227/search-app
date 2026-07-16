@@ -107,6 +107,56 @@ class ScreenCaptureService : Service() {
          * 判断录屏服务是否正在运行。
          */
         fun isRunning(): Boolean = instance != null
+
+        /**
+         * 以录屏模式启动搜题。
+         *
+         * @param context 上下文
+         * @param projectionIntent MediaProjection 授权 Intent
+         * @param selectionRect 用户选区矩形（屏幕坐标）
+         */
+        fun startWithProjection(
+            context: Context,
+            projectionIntent: Intent,
+            selectionRect: Rect?
+        ) {
+            val intent = Intent(context, ScreenCaptureService::class.java).apply {
+                action = ACTION_START_CAPTURE
+                putExtra(EXTRA_PROJECTION_INTENT, projectionIntent)
+                if (selectionRect != null) {
+                    putExtra(EXTRA_SELECTION_RECT, selectionRect)
+                }
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+        }
+
+        /**
+         * 从无障碍模式一键切换到录屏模式。
+         *
+         * @param context 上下文
+         * @param onReadyToRequest 准备就绪回调，调用方需在此启动系统授权对话框
+         */
+        fun switchFromAccessibility(
+            context: Context,
+            onReadyToRequest: (Intent) -> Unit
+        ) {
+            // 先确保 OCR 引擎已初始化
+            if (!PaddleOCREngine.isReady()) {
+                PaddleOCREngine.init(context)
+            }
+
+            // 准备 MediaProjection 授权请求
+            val projectionManager = context.getSystemService(
+                Context.MEDIA_PROJECTION_SERVICE
+            ) as MediaProjectionManager
+
+            onReadyToRequest(projectionManager.createScreenCaptureIntent())
+        }
     }
 
     // ==================== 外部启动参数 ====================
@@ -658,90 +708,5 @@ class ScreenCaptureService : Service() {
                         "设置路径：设置 → 无障碍 → 智能搜题"
             )
         }
-    }
-
-    // ==================== 静态启动方法 ====================
-
-    /**
-     * 以录屏模式启动搜题。
-     *
-     * 调用方（Activity/Fragment）应先通过 MediaProjectionManager 获取授权 Intent，
-     * 然后将 Intent 和选区 Rect 传递给此方法。
-     *
-     * 完整调用示例：
-     * ```kotlin
-     * // 在 Activity 中：
-     * val projectionManager = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-     * startActivityForResult(projectionManager.createScreenCaptureIntent(), REQUEST_CODE)
-     *
-     * // 在 onActivityResult 中：
-     * override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-     *     if (requestCode == REQUEST_CODE && resultCode == RESULT_OK && data != null) {
-     *         ScreenCaptureService.startWithProjection(
-     *             this, data, selectionRect,
-     *             onResult = { text -> /* 处理识别结果 */ }
-     *         )
-     *     }
-     * }
-     * ```
-     *
-     * @param context 上下文
-     * @param projectionIntent MediaProjection 授权 Intent
-     * @param selectionRect 用户选区矩形（屏幕坐标）
-     */
-    fun startWithProjection(
-        context: Context,
-        projectionIntent: Intent,
-        selectionRect: Rect?
-    ) {
-        val intent = Intent(context, ScreenCaptureService::class.java).apply {
-            action = ACTION_START_CAPTURE
-            putExtra(EXTRA_PROJECTION_INTENT, projectionIntent)
-            if (selectionRect != null) {
-                putExtra(EXTRA_SELECTION_RECT, selectionRect)
-            }
-        }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            context.startForegroundService(intent)
-        } else {
-            context.startService(intent)
-        }
-    }
-
-    /**
-     * 从无障碍模式一键切换到录屏模式。
-     *
-     * 调用方需要自行处理 MediaProjection 授权流程（弹系统确认对话框）。
-     * 此方法提供便捷的启动方式，配合 [startWithProjection] 完成切换。
-     *
-     * 调用示例：
-     * ```kotlin
-     * // 在 Activity 中：
-     * ScreenCaptureService.switchFromAccessibility(this) { projectionIntent ->
-     *     startActivityForResult(
-     *         projectionManager.createScreenCaptureIntent(), REQUEST_CODE
-     *     )
-     * }
-     * ```
-     *
-     * @param context 上下文
-     * @param onReadyToRequest 准备就绪回调，调用方需在此启动系统授权对话框
-     */
-    fun switchFromAccessibility(
-        context: Context,
-        onReadyToRequest: (Intent) -> Unit
-    ) {
-        // 先确保 OCR 引擎已初始化
-        if (!PaddleOCREngine.isReady()) {
-            PaddleOCREngine.init(context)
-        }
-
-        // 准备 MediaProjection 授权请求
-        val projectionManager = context.getSystemService(
-            Context.MEDIA_PROJECTION_SERVICE
-        ) as MediaProjectionManager
-
-        onReadyToRequest(projectionManager.createScreenCaptureIntent())
     }
 }

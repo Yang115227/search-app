@@ -442,7 +442,7 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
             // 关键 Flag：不拦截底层页面触控，不获取焦点
             flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                     WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                    WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+                    WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
 
             // 全屏布局
             width = screenWidth
