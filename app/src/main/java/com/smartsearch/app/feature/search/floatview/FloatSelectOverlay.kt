@@ -180,12 +180,19 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
 
     // ==================== 触摸状态 ====================
 
+    /** 防抖死区阈值（像素） */
+    private val touchDeadZone = 5f.dp(5f)
+
     /** 当前触摸模式 */
     private var touchMode = TouchMode.NONE
 
     /** 触摸起始位置 */
     private var touchStartX = 0f
     private var touchStartY = 0f
+
+    /** 上次有效触摸位置（用于防抖） */
+    private var lastValidX = 0f
+    private var lastValidY = 0f
 
     /** 拖拽开始时选区的原始位置 */
     private var dragStartRect = RectF()
@@ -362,6 +369,8 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
     private fun handleTouchDown(x: Float, y: Float) {
         touchStartX = x
         touchStartY = y
+        lastValidX = x
+        lastValidY = y
 
         // 优先级 1：点击 X 关闭按钮
         if (RectUtil.hitCloseButton(x, y, selectionRect, closeButtonRadius * 2f, 0f, touchSlop)) {
@@ -409,8 +418,18 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
 
     /**
      * 手指移动：根据当前模式计算选区变化。
+     * 包含防抖逻辑：触摸死区 5px，防止微颤导致选区跳动。
      */
     private fun handleTouchMove(x: Float, y: Float) {
+        // 防抖：移动距离小于死区阈值时忽略
+        val moveDx = kotlin.math.abs(x - lastValidX)
+        val moveDy = kotlin.math.abs(y - lastValidY)
+        if (moveDx < touchDeadZone && moveDy < touchDeadZone) {
+            return
+        }
+        lastValidX = x
+        lastValidY = y
+
         val dx = x - touchStartX
         val dy = y - touchStartY
 

@@ -1,6 +1,7 @@
 package com.smartsearch.app.ui
 
 import android.app.Activity
+import android.content.DialogInterface
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -231,8 +232,9 @@ class HomeActivity : ComponentActivity() {
                     onStartAccessibilitySearch = { startAccessibilitySearch() },
                     onStartScreenCaptureSearch = { startScreenCaptureSearch() },
                     onImportQuestions = { openFilePicker() },
-                    onOpenQuestionBank = { QuestionBankDialog(this).show() },
+                    onOpenQuestionBank = { QuestionBankDialog(this, onImportClick = { openFilePicker() }).show() },
                     onOpenPractice = { startPractice() },
+                    onOpenWrongBook = { openWrongBook() },
                     permissionStatus = rememberPermissionStatus()
                 )
             }
@@ -370,6 +372,84 @@ class HomeActivity : ComponentActivity() {
         PracticeDialog(this).show()
     }
 
+    // ==================== 错题本 ====================
+
+    /**
+     * 打开错题本对话框。
+     * 使用简单的 AlertDialog 显示未掌握的错题列表。
+     */
+    private fun openWrongBook() {
+        CoroutineScope(Dispatchers.Main).launch {
+            val db = QuizDatabase.getInstance(this@HomeActivity)
+            val wrongQuestions = withContext(Dispatchers.IO) {
+                db.wrongQuestionDao().getUnmasteredWrongQuestions()
+            }
+
+            if (wrongQuestions.isEmpty()) {
+                android.app.AlertDialog.Builder(this@HomeActivity)
+                    .setTitle("错题本")
+                    .setMessage("暂无错题记录，继续加油！")
+                    .setPositiveButton("确定", null)
+                    .show()
+                return@launch
+            }
+
+            // 构建错题列表（题目摘要 + 错误次数）
+            val items = withContext(Dispatchers.IO) {
+                wrongQuestions.mapNotNull { wq ->
+                    val q = db.questionDao().findById(wq.questionId)
+                    if (q != null) {
+                        "${q.question.take(25)}${if (q.question.length > 25) "..." else ""} (错${wq.wrongCount}次)"
+                    } else null
+                }.toTypedArray()
+            }
+
+            android.app.AlertDialog.Builder(this@HomeActivity)
+                .setTitle("错题本 (${wrongQuestions.size}题)")
+                .setItems(items) { _: DialogInterface, which: Int ->
+                    val wq = wrongQuestions[which]
+                    showWrongQuestionDetail(wq.questionId, wq.wrongCount)
+                }
+                .setPositiveButton("关闭", null)
+                .show()
+        }
+    }
+
+    /**
+     * 显示错题详情对话框。
+     */
+    private fun showWrongQuestionDetail(questionId: Long, wrongCount: Int) {
+        CoroutineScope(Dispatchers.Main).launch {
+            val q = withContext(Dispatchers.IO) {
+                QuizDatabase.getInstance(this@HomeActivity).questionDao().findById(questionId)
+            }
+            if (q == null) {
+                Toast.makeText(this@HomeActivity, "题目已被删除", Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+
+            val message = "题目：${q.question}\n\n" +
+                    "答案：${q.answer}\n\n" +
+                    if (q.explanation.isNotBlank()) "解析：${q.explanation}\n\n" else "" +
+                    "错误次数：$wrongCount 次"
+
+            android.app.AlertDialog.Builder(this@HomeActivity)
+                .setTitle("错题详情")
+                .setMessage(message)
+                .setPositiveButton("关闭", null)
+                .setNeutralButton("标记已掌握") { _: DialogInterface, _: Int ->
+                    CoroutineScope(Dispatchers.Main).launch {
+                        withContext(Dispatchers.IO) {
+                            QuizDatabase.getInstance(this@HomeActivity)
+                                .wrongQuestionDao().markMastered(questionId)
+                        }
+                        Toast.makeText(this@HomeActivity, "已标记为掌握", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                .show()
+        }
+    }
+
     // ==================== 题库导入 ====================
 
     /**
@@ -400,6 +480,7 @@ fun HomeScreen(
     onImportQuestions: () -> Unit,
     onOpenQuestionBank: () -> Unit,
     onOpenPractice: () -> Unit,
+    onOpenWrongBook: () -> Unit,
     permissionStatus: Map<String, PermissionManager.PermissionStatus>
 ) {
     val scrollState = rememberScrollState()
@@ -505,12 +586,27 @@ fun HomeScreen(
                 onClick = onOpenQuestionBank,
                 modifier = Modifier.weight(1f)
             )
+        }
 
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
             // 练习
             FunctionCard(
                 title = "练习",
                 subtitle = "随机出题",
                 onClick = onOpenPractice,
+                modifier = Modifier.weight(1f)
+            )
+
+            // 错题本
+            FunctionCard(
+                title = "错题本",
+                subtitle = "复习错题",
+                onClick = onOpenWrongBook,
                 modifier = Modifier.weight(1f)
             )
         }

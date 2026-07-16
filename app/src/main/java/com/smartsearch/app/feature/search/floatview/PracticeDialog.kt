@@ -3,14 +3,12 @@ package com.smartsearch.app.feature.search.floatview
 import android.app.AlertDialog
 import android.content.Context
 import android.graphics.Color
-import android.text.Html
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.method.ScrollingMovementMethod
 import android.text.style.ForegroundColorSpan
 import android.view.Gravity
 import android.view.View
-import android.view.WindowManager
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.RadioButton
@@ -18,6 +16,7 @@ import android.widget.RadioGroup
 import android.widget.ScrollView
 import android.widget.TextView
 import com.smartsearch.app.data.local.QuizDatabase
+import com.smartsearch.app.data.local.entity.PracticeRecordEntity
 import com.smartsearch.app.data.local.entity.QuestionEntity
 import com.google.gson.JsonParser
 import kotlinx.coroutines.CoroutineScope
@@ -30,6 +29,7 @@ import kotlinx.coroutines.withContext
  *
  * 支持随机练习和顺序练习两种模式。
  * 用户选择答案后提交，可查看正确答案和解析。
+ * 答错时自动归档到错题表，练习结束后自动保存练习记录。
  */
 class PracticeDialog(private val context: Context) {
 
@@ -69,6 +69,9 @@ class PracticeDialog(private val context: Context) {
 
     /** 已答题数 */
     private var answeredCount = 0
+
+    /** 练习开始时间戳 */
+    private var startTime = 0L
 
     // ==================== 视图引用 ====================
 
@@ -232,6 +235,9 @@ class PracticeDialog(private val context: Context) {
 
         dialog?.show()
 
+        // 记录开始时间
+        startTime = System.currentTimeMillis()
+
         // 加载题目
         loadQuestions()
     }
@@ -279,6 +285,8 @@ class PracticeDialog(private val context: Context) {
         resultText.visibility = View.GONE
         submitButton.visibility = View.VISIBLE
         submitButton.isEnabled = true
+        submitButton.text = "提交答案"
+        submitButton.setOnClickListener { onSubmit() }
         nextButton.visibility = View.GONE
 
         // 解析选项
@@ -346,6 +354,7 @@ class PracticeDialog(private val context: Context) {
 
     /**
      * 提交答案。
+     * 答错时自动归档到错题表。
      */
     private fun onSubmit() {
         if (selectedOptionIndex < 0) {
@@ -375,6 +384,14 @@ class PracticeDialog(private val context: Context) {
 
         if (isCorrect) {
             correctCount++
+        } else {
+            // 答错时自动归档到错题表
+            CoroutineScope(Dispatchers.Main).launch {
+                withContext(Dispatchers.IO) {
+                    QuizDatabase.getInstance(context).wrongQuestionDao()
+                        .recordWrong(q.id, System.currentTimeMillis())
+                }
+            }
         }
 
         // 显示结果
@@ -436,6 +453,7 @@ class PracticeDialog(private val context: Context) {
         scoreText.text = "正确: 0/0"
         isSubmitted = false
         selectedOptionIndex = -1
+        startTime = System.currentTimeMillis()
 
         // 重新加载题目
         loadQuestions()
@@ -443,45 +461,62 @@ class PracticeDialog(private val context: Context) {
 
     /**
      * 完成所有题目。
+     * 显示统计信息（正确数、正确率、耗时），自动保存练习记录。
      */
     private fun showComplete() {
+        val durationSeconds = (System.currentTimeMillis() - startTime) / 1000
+        val accuracy = if (answeredCount > 0) correctCount.toFloat() / answeredCount else 0f
+
+        // 自动保存练习记录
+        CoroutineScope(Dispatchers.Main).launch {
+            withContext(Dispatchers.IO) {
+                QuizDatabase.getInstance(context).practiceRecordDao().insert(
+                    PracticeRecordEntity(
+                        totalQuestions = answeredCount,
+                        correctCount = correctCount,
+                        accuracy = accuracy,
+                        durationSeconds = durationSeconds,
+                        practiceTime = System.currentTimeMillis()
+                    )
+                )
+            }
+        }
+
         progressText.text = "练习完成！"
         questionText.text = "恭喜你完成了所有 ${allQuestions.size} 道题目！"
         optionsGroup.removeAllViews()
+
+        // 统计信息
+        val durationText = if (durationSeconds >= 60) {
+            "${durationSeconds / 60}分${durationSeconds % 60}秒"
+        } else {
+            "${durationSeconds}秒"
+        }
         resultText.text = "最终成绩：$correctCount/$answeredCount 正确" +
-                "\n正确率：${String.format("%.1f", answeredCount.let { if (it > 0) correctCount * 100.0 / it else 0.0 })}%"
+                "\n正确率：${String.format("%.1f", accuracy * 100)}%" +
+                "\n耗时：$durationText"
         resultText.visibility = View.VISIBLE
         submitButton.visibility = View.GONE
 
-        val restartButton = Button(context).apply {
+        // 重新开始按钮
+        nextButton.apply {
             text = if (currentMode == PracticeMode.RANDOM) "再抽一轮" else "重新开始"
-            setTextColor(Color.WHITE)
-            setBackgroundColor(Color.parseColor("#4CAF50"))
+            visibility = View.VISIBLE
             setOnClickListener {
                 currentIndex = 0
                 correctCount = 0
                 answeredCount = 0
                 scoreText.text = "正确: 0/0"
+                startTime = System.currentTimeMillis()
                 loadQuestions()
             }
         }
-        nextButton.apply {
-            text = "退出"
-            setOnClickListener { dismiss() }
-            visibility = View.VISIBLE
-        }
-        // 添加重新开始按钮
-        // 复用 submitButton 的位置
+
+        // 退出按钮
         submitButton.visibility = View.VISIBLE
-        submitButton.text = if (currentMode == PracticeMode.RANDOM) "再抽一轮" else "重新开始"
-        submitButton.setOnClickListener {
-            currentIndex = 0
-            correctCount = 0
-            answeredCount = 0
-            scoreText.text = "正确: 0/0"
-            loadQuestions()
-        }
+        submitButton.text = "退出"
         submitButton.isEnabled = true
+        submitButton.setOnClickListener { dismiss() }
     }
 
     /**
@@ -503,5 +538,4 @@ class PracticeDialog(private val context: Context) {
         dialog?.dismiss()
         dialog = null
     }
-
-    }
+}

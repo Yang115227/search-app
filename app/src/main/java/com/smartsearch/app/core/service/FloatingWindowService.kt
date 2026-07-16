@@ -7,26 +7,33 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
 import android.graphics.PixelFormat
-import android.graphics.Rect
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.util.Log
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
-import android.widget.ImageView
-import com.smartsearch.app.feature.search.accessibility.AccessibilitySearchService
 import com.smartsearch.app.core.permission.PermissionManager
+import com.smartsearch.app.feature.search.accessibility.AccessibilitySearchService
+import com.smartsearch.app.feature.search.floatview.FunctionPanelView
 
 /**
  * 悬浮球前台服务 —— 保活并在屏幕上显示可拖拽悬浮球。
  *
  * # 悬浮球交互
- * - 单击：触发搜题流程（选题框 → 无障碍扫描 → 答案弹窗）
- * - 长按：关闭悬浮球
- * - 拖拽：移动悬浮球位置
+ * - 单击：弹出功能面板（录屏搜题、无障碍搜题、相机扫描、关闭悬浮窗）
+ * - 长按：关闭悬浮窗
+ * - 拖拽：移动悬浮球位置，松手自动吸附屏幕左右边缘
+ *
+ * # 防抖机制
+ * 在 accessibility 模式下锁定坐标，消除悬浮球抖动 bug。
  *
  * # 前台服务通知
  * Android 8+ 必须创建通知渠道并显示前台通知，否则 Service 会被系统杀死。
@@ -43,14 +50,26 @@ class FloatingWindowService : Service() {
 
         /** 悬浮球默认边长 dp */
         private const val BALL_SIZE_DP = 52f
+
+        /** 长按阈值（毫秒） */
+        private const val LONG_PRESS_MS = 800L
+
+        /** 触摸死区（像素），用于防抖 */
+        private const val TOUCH_DEAD_ZONE_PX = 5f
+
+        /** 吸附动画总时长（毫秒） */
+        private const val SNAP_DURATION_MS = 200L
     }
 
     // ==================== 窗口管理 ====================
 
     private var windowManager: WindowManager? = null
-    private var floatingBallView: View? = null
+    private var floatingBallView: FloatingBallView? = null
     private var windowParams: WindowManager.LayoutParams? = null
     private var isViewAttached = false
+
+    /** 功能面板实例 */
+    private var functionPanel: FunctionPanelView? = null
 
     // ==================== 触摸状态 ====================
 
@@ -60,24 +79,44 @@ class FloatingWindowService : Service() {
     private var initialWindowY = 0
     private var touchStartTime = 0L
     private var isDragging = false
+    private var isLongPressed = false
+
+    /** 防抖锁定坐标：在 accessibility 模式下锁定，防止悬浮球抖动 */
+    private var lastStableX = 0
+    private var lastStableY = 0
+    private var antiShakeEnabled = false
 
     // ==================== 尺寸 ====================
 
     private var ballSizePx = 0
     private var density = 1f
+    private var screenWidth = 0
+    private var screenHeight = 0
+
+    // ==================== 主线程 Handler ====================
+
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val longPressRunnable = Runnable {
+        isLongPressed = true
+        stopSelf()
+        FloatWindowManager.destroyAll()
+    }
 
     // ==================== 生命周期 ====================
 
     override fun onCreate() {
         super.onCreate()
+        AccessibilitySearchServiceHolder.serviceInstance = this
         density = resources.displayMetrics.density
         ballSizePx = (BALL_SIZE_DP * density).toInt()
+        val metrics = resources.displayMetrics
+        screenWidth = metrics.widthPixels
+        screenHeight = metrics.heightPixels
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         createNotificationChannel()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // Android 14+ 前台服务必须先调用 startForeground
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             startForeground(
                 NOTIFICATION_ID,
@@ -87,7 +126,15 @@ class FloatingWindowService : Service() {
         } else {
             startForeground(NOTIFICATION_ID, buildNotification())
         }
-        attachFloatingBall()
+
+        // 检查悬浮窗权限
+        if (PermissionManager.checkFloatingWindow(this) != PermissionManager.PermissionStatus.GRANTED) {
+            // 权限未授予 → 不显示悬浮球，直接弹窗引导
+            notifyPermissionRequired()
+        } else {
+            attachFloatingBall()
+        }
+
         @Suppress("DEPRECATION")
         return START_STICKY
     }
@@ -95,7 +142,9 @@ class FloatingWindowService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        dismissFunctionPanel()
         detachFloatingBall()
+        mainHandler.removeCallbacks(longPressRunnable)
         super.onDestroy()
     }
 
@@ -117,7 +166,6 @@ class FloatingWindowService : Service() {
     }
 
     private fun buildNotification(): Notification {
-        // 点击通知可打开主界面
         val pendingIntent = PendingIntent.getActivity(
             this,
             0,
@@ -145,21 +193,69 @@ class FloatingWindowService : Service() {
         }
     }
 
+    // ==================== 权限引导 ====================
+
+    /**
+     * 悬浮窗权限未授予时，通过 AnswerFloatWindow 弹窗引导用户授权。
+     */
+    private fun notifyPermissionRequired() {
+        FloatWindowManager.showAnswerWindow(
+            this,
+            answer = "需要悬浮窗权限",
+            explanation = "智能搜题需要悬浮窗权限才能在屏幕上显示悬浮球和搜题结果。\n\n" +
+                    "请点击下方按钮前往系统设置开启悬浮窗权限。",
+            onDismissed = {
+                // 跳转悬浮窗权限设置页
+                val intent = PermissionManager.getFloatingWindowSettingsIntent(this)
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                startActivity(intent)
+            }
+        )
+    }
+
     // ==================== 悬浮球视图 ====================
 
     /**
-     * 创建悬浮球 View（圆形绿底白字搜索图标）。
-     *
-     * 实际项目中应替换为 ImageView + 自定义 drawable 或 Compose 绘制的图标。
-     * 此处为简化实现，使用文字图标 "搜"。
+     * 自定义 View：Canvas 绘制圆形绿色悬浮球，内容为白色"搜"字。
      */
-    private fun createFloatingBallView(): View {
-        return ImageView(this).apply {
-            // 使用系统内置搜索图标作为占位
-            setImageResource(android.R.drawable.ic_menu_search)
-            setBackgroundColor(0xCC4CAF50.toInt()) // 半透明绿色
-            setPadding(8, 8, 8, 8)
+    private inner class FloatingBallView(context: Context) : View(context) {
 
+        private val circlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.parseColor("#4CAF50")
+            style = Paint.Style.FILL
+        }
+
+        private val circleBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.argb(40, 255, 255, 255)
+            style = Paint.Style.STROKE
+            strokeWidth = 2f * density
+        }
+
+        private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            textSize = 22f * density
+            isFakeBoldText = true
+            textAlign = Paint.Align.CENTER
+        }
+
+        override fun onDraw(canvas: Canvas) {
+            super.onDraw(canvas)
+            val cx = width / 2f
+            val cy = height / 2f
+            val radius = minOf(cx, cy) - 2f * density
+
+            // 圆形绿色背景
+            canvas.drawCircle(cx, cy, radius, circlePaint)
+            // 白色描边
+            canvas.drawCircle(cx, cy, radius, circleBorderPaint)
+            // 白色"搜"字
+            val textY = cy - (textPaint.fontMetrics.ascent + textPaint.fontMetrics.descent) / 2f
+            canvas.drawText("搜", cx, textY, textPaint)
+        }
+    }
+
+    private fun createFloatingBallView(): View {
+        return FloatingBallView(this).apply {
             setOnTouchListener { _, event -> handleTouchEvent(event) }
         }
     }
@@ -170,10 +266,7 @@ class FloatingWindowService : Service() {
     private fun attachFloatingBall() {
         if (isViewAttached) return
 
-        floatingBallView = createFloatingBallView()
-
-        val metrics = resources.displayMetrics
-        val screenWidth = metrics.widthPixels
+        floatingBallView = FloatingBallView(this)
 
         windowParams = WindowManager.LayoutParams().apply {
             type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -183,23 +276,28 @@ class FloatingWindowService : Service() {
                 WindowManager.LayoutParams.TYPE_PHONE
             }
 
-            flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+            flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
 
             width = ballSizePx
             height = ballSizePx
             gravity = Gravity.TOP or Gravity.START
             // 默认位置：屏幕右侧中偏下
             x = screenWidth - ballSizePx - 16
-            y = (metrics.heightPixels * 0.6f).toInt()
+            y = (screenHeight * 0.6f).toInt()
 
             format = PixelFormat.TRANSLUCENT
         }
+
+        lastStableX = windowParams!!.x
+        lastStableY = windowParams!!.y
 
         try {
             windowManager?.addView(floatingBallView, windowParams)
             isViewAttached = true
         } catch (e: SecurityException) {
             Log.e(TAG, "悬浮窗权限未授予", e)
+            isViewAttached = false
         }
     }
 
@@ -217,6 +315,20 @@ class FloatingWindowService : Service() {
         floatingBallView = null
     }
 
+    /**
+     * 更新悬浮球位置，带防抖逻辑。
+     */
+    private fun updateBallPosition(newX: Int, newY: Int) {
+        val params = windowParams ?: return
+        params.x = newX
+        params.y = newY
+        try {
+            windowManager?.updateViewLayout(floatingBallView, params)
+        } catch (e: IllegalArgumentException) {
+            // 视图已被移除
+        }
+    }
+
     // ==================== 触摸事件处理 ====================
 
     private fun handleTouchEvent(event: MotionEvent): Boolean {
@@ -228,6 +340,10 @@ class FloatingWindowService : Service() {
                 initialWindowY = windowParams?.y ?: 0
                 touchStartTime = System.currentTimeMillis()
                 isDragging = false
+                isLongPressed = false
+
+                // 启动长按检测
+                mainHandler.postDelayed(longPressRunnable, LONG_PRESS_MS)
                 return true
             }
 
@@ -235,50 +351,61 @@ class FloatingWindowService : Service() {
                 val dx = event.rawX - initialTouchX
                 val dy = event.rawY - initialTouchY
 
-                // 5px 死区阈值，防止微颤导致频繁位置更新
-                if (kotlin.math.abs(dx) > 5f || kotlin.math.abs(dy) > 5f) {
+                // 触摸死区：移动距离小于 5px 时忽略，防止微颤
+                if (kotlin.math.abs(dx) > TOUCH_DEAD_ZONE_PX || kotlin.math.abs(dy) > TOUCH_DEAD_ZONE_PX) {
                     isDragging = true
+                    // 有移动时取消长按检测
+                    mainHandler.removeCallbacks(longPressRunnable)
                 }
 
                 if (isDragging && windowParams != null) {
-                    windowParams?.x = (initialWindowX + dx).toInt()
-                    windowParams?.y = (initialWindowY + dy).toInt()
-                    try {
-                        windowManager?.updateViewLayout(floatingBallView, windowParams)
-                    } catch (e: IllegalArgumentException) {
-                        // 视图已被移除
+                    val newX = (initialWindowX + dx).toInt()
+                    val newY = (initialWindowY + dy).toInt()
+
+                    // 防抖：在 accessibility 模式下，如果坐标变化极小则使用锁定坐标
+                    if (antiShakeEnabled) {
+                        val shakeDx = kotlin.math.abs(newX - lastStableX)
+                        val shakeDy = kotlin.math.abs(newY - lastStableY)
+                        if (shakeDx < TOUCH_DEAD_ZONE_PX && shakeDy < TOUCH_DEAD_ZONE_PX) {
+                            // 抖动过小，忽略此次更新
+                            return true
+                        }
                     }
+
+                    lastStableX = newX
+                    lastStableY = newY
+                    updateBallPosition(newX, newY)
                 }
                 return true
             }
 
             MotionEvent.ACTION_UP -> {
+                mainHandler.removeCallbacks(longPressRunnable)
                 val elapsed = System.currentTimeMillis() - touchStartTime
                 val dx = event.rawX - initialTouchX
                 val dy = event.rawY - initialTouchY
                 val distance = kotlin.math.sqrt(dx * dx + dy * dy)
 
                 when {
-                    // 长按超过 800ms → 关闭悬浮球
-                    elapsed > 800 && distance < 20f -> {
-                        stopSelf()
-                        FloatWindowManager.destroyAll()
+                    // 长按触发 → 已通过 Runnable 关闭服务，此处不再重复处理
+                    isLongPressed -> {
+                        // 已处理
                     }
-                    // 点击（短按且未拖拽）→ 触发搜题
-                    !isDragging && elapsed < 500 && distance < 20f -> {
-                        triggerSelectionSearch()
+                    // 点击（短按且未拖拽）→ 弹出功能面板
+                    !isDragging && elapsed < LONG_PRESS_MS && distance < TOUCH_DEAD_ZONE_PX * 4 -> {
+                        showFunctionPanel()
                     }
                     // 拖拽结束 → 吸附边缘
                     isDragging -> {
                         snapToEdge()
                     }
                 }
-                // 重置拖拽状态，避免下次 UP 误触发
                 isDragging = false
                 return true
             }
 
             MotionEvent.ACTION_CANCEL -> {
+                mainHandler.removeCallbacks(longPressRunnable)
                 isDragging = false
                 return true
             }
@@ -286,21 +413,33 @@ class FloatingWindowService : Service() {
         return false
     }
 
+    // ==================== 吸附边缘 ====================
+
     /**
      * 拖拽结束后将悬浮球吸附到屏幕左边缘或右边缘。
+     * 根据悬浮球中心点距离最近边缘决定吸附方向。
      */
     private fun snapToEdge() {
         val params = windowParams ?: return
         val metrics = resources.displayMetrics
-        val screenWidth = metrics.widthPixels
+        val screenW = metrics.widthPixels
         val centerX = params.x + ballSizePx / 2
 
-        // 吸附到最近边缘
-        params.x = if (centerX < screenWidth / 2) {
+        // 计算目标 X 坐标
+        val targetX = if (centerX < screenW / 2) {
             0
         } else {
-            screenWidth - ballSizePx
+            screenW - ballSizePx
         }
+
+        // 约束 Y 在屏幕范围内
+        val clampedY = params.y.coerceIn(0, screenHeight - ballSizePx)
+
+        params.x = targetX
+        params.y = clampedY
+
+        lastStableX = targetX
+        lastStableY = clampedY
 
         try {
             windowManager?.updateViewLayout(floatingBallView, params)
@@ -309,49 +448,83 @@ class FloatingWindowService : Service() {
         }
     }
 
+    // ==================== 功能面板管理 ====================
+
+    /**
+     * 在悬浮球附近弹出功能面板。
+     */
+    private fun showFunctionPanel() {
+        if (functionPanel != null) return
+
+        val params = windowParams ?: return
+        val ballCenterX = params.x + ballSizePx / 2
+        val ballBottom = params.y + ballSizePx
+
+        // 面板默认显示在悬浮球下方，如果空间不足则显示在上方
+        val panelWidth = 280f * density
+        val panelHeight = 320f * density
+        val panelX = (ballCenterX - panelWidth / 2).toInt().coerceIn(0, (screenWidth - panelWidth).toInt())
+        val panelY: Int
+
+        if (ballBottom + panelHeight + 20f * density < screenHeight) {
+            panelY = (ballBottom + 10f * density).toInt()
+        } else {
+            panelY = (params.y - panelHeight - 10f * density).toInt().coerceAtLeast(0)
+        }
+
+        val panel = FunctionPanelView(this).apply {
+            onDismiss = {
+                dismissFunctionPanel()
+            }
+            onScreenCaptureClick = {
+                dismissFunctionPanel()
+                FloatWindowManager.switchToScreenCaptureMode(this@FloatingWindowService)
+            }
+            onAccessibilityClick = {
+                dismissFunctionPanel()
+                triggerAccessibilitySearch()
+            }
+            onCameraClick = {
+                dismissFunctionPanel()
+                triggerCameraSearch()
+            }
+            onCloseClick = {
+                dismissFunctionPanel()
+                stopSelf()
+                FloatWindowManager.destroyAll()
+            }
+        }
+
+        functionPanel = panel
+        panel.attachToWindow(panelX, panelY, panelWidth.toInt(), panelHeight.toInt())
+    }
+
+    /**
+     * 关闭功能面板。
+     */
+    fun dismissFunctionPanel() {
+        functionPanel?.detachFromWindow()
+        functionPanel = null
+    }
+
     // ==================== 搜题触发入口 ====================
 
     /**
-     * 悬浮球点击时触发搜题流程。
-     *
-     * # 完整调用链
-     * ```
-     * 1. 检查悬浮窗权限 → 未授权则引导用户
-     * 2. FloatWindowManager.showSelectOverlay() 显示选题框
-     * 3. 用户拖拽确认选区 → 回调 Rect
-     * 4. 获取 AccessibilitySearchService 实例 → 传入选区 Rect
-     * 5. AccessibilitySearchService.setSelectionRect(rect) 触发扫描
-     * 6. 扫描成功 → FloatWindowManager.showAnswerWindow() 显示答案
-     * 7. 扫描失败 → 弹出空结果提示，引导切换录屏模式
-     * ```
-     *
-     * 注意：实际项目中需要维护 AccessibilitySearchService 的引用。
-     * 可选方案：
-     * - 通过 EventBus / LiveData 传递选区 Rect
-     * - 通过静态方法/单例持有服务实例
-     * - 通过 BroadcastReceiver 跨进程通信
-     *
-     * 此处使用静态引用方式（简洁，适合单进程场景）。
+     * 触发无障碍搜题流程。
      */
-    private fun triggerSelectionSearch() {
-        // 第一步：检查悬浮窗权限
+    private fun triggerAccessibilitySearch() {
+        // 检查悬浮窗权限
         if (PermissionManager.checkFloatingWindow(this) != PermissionManager.PermissionStatus.GRANTED) {
-            // 权限未授予 → 跳转设置页
-            val intent = PermissionManager.getFloatingWindowSettingsIntent(this)
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            startActivity(intent)
+            notifyPermissionRequired()
             return
         }
 
-        // 第二步：显示选题框，注册选区回调
-        FloatWindowManager.showSelectOverlay(this) { rect: Rect ->
-            // 第三步：将选区传递给无障碍服务
-            // 方式 A：通过单例/静态引用获取服务实例
+        // 显示选题框，注册选区回调
+        FloatWindowManager.showSelectOverlay(this) { rect ->
             val service = AccessibilitySearchServiceHolder.instance
             if (service != null) {
                 service.setSelectionRect(rect)
             } else {
-                // 无障碍服务未运行 → 提示用户开启
                 Log.w(TAG, "无障碍服务未运行，无法进行搜题")
                 FloatWindowManager.destroyAll()
                 FloatWindowManager.showAnswerWindow(
@@ -365,6 +538,33 @@ class FloatingWindowService : Service() {
     }
 
     /**
+     * 触发相机扫描搜题。
+     */
+    private fun triggerCameraSearch() {
+        // 相机搜题入口，后续可扩展
+        FloatWindowManager.showAnswerWindow(
+            this,
+            answer = "相机扫描",
+            explanation = "相机扫描功能开发中，敬请期待。\n\n" +
+                    "当前支持：\n" +
+                    "• 无障碍搜题（自动识别屏幕文字）\n" +
+                    "• 录屏搜题（通过 OCR 识别）"
+        )
+    }
+
+    // ==================== 防抖控制 ====================
+
+    /**
+     * 启用/禁用防抖模式。
+     * 在 accessibility 服务运行时应启用，防止悬浮球抖动。
+     */
+    fun setAntiShakeEnabled(enabled: Boolean) {
+        antiShakeEnabled = enabled
+    }
+
+    // ==================== 静态持有者 ====================
+
+    /**
      * 持有 AccessibilitySearchService 实例的静态引用。
      *
      * 在 [AccessibilitySearchService.onServiceConnected] 中设置，
@@ -373,5 +573,9 @@ class FloatingWindowService : Service() {
     object AccessibilitySearchServiceHolder {
         @Volatile
         var instance: AccessibilitySearchService? = null
+
+        /** 当前 FloatingWindowService 实例 */
+        @Volatile
+        var serviceInstance: FloatingWindowService? = null
     }
 }

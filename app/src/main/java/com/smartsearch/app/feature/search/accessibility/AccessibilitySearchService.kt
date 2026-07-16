@@ -136,6 +136,9 @@ class AccessibilitySearchService : AccessibilityService() {
         FloatingWindowService.AccessibilitySearchServiceHolder.instance = this
         serviceInstance = this
 
+        // 通知 FloatingWindowService 启用防抖模式
+        FloatingWindowService.AccessibilitySearchServiceHolder.serviceInstance?.setAntiShakeEnabled(true)
+
         // 配置无障碍服务信息
         val info = AccessibilityServiceInfo().apply {
             eventTypes = AccessibilityEvent.TYPES_ALL_MASK // 监听所有事件类型
@@ -174,6 +177,10 @@ class AccessibilitySearchService : AccessibilityService() {
         super.onDestroy()
         isRunning = false
         cancelThrottle()
+
+        // 通知 FloatingWindowService 禁用防抖模式
+        FloatingWindowService.AccessibilitySearchServiceHolder.serviceInstance?.setAntiShakeEnabled(false)
+
         // 清除静态持有者引用，防止内存泄漏
         FloatingWindowService.AccessibilitySearchServiceHolder.instance = null
         serviceInstance = null

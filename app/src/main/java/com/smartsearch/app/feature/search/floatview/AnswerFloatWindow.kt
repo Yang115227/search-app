@@ -93,6 +93,15 @@ class AnswerFloatWindow(private val context: Context) : View(context) {
     /** 返回箭头描边宽度 */
     private val backArrowStroke = 2.5f.dp(2.5f)
 
+    /** 关闭按钮半径 */
+    private val closeButtonRadius = 14f.dp(14f)
+
+    /** 关闭按钮 X 线条长度 */
+    private val closeCrossLen = 6f.dp(6f)
+
+    /** 关闭按钮描边宽度 */
+    private val closeButtonStroke = 2.5f.dp(2.5f)
+
     /** 缩放控制点边长 */
     private val resizeHandleSize = 36f.dp(36f)
 
@@ -167,6 +176,20 @@ class AnswerFloatWindow(private val context: Context) : View(context) {
         strokeWidth = backArrowStroke
         strokeCap = Paint.Cap.ROUND
         strokeJoin = Paint.Join.ROUND
+    }
+
+    /** 关闭按钮背景圆画笔 */
+    private val closeBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.argb(30, 0, 0, 0) // 极浅灰
+        style = Paint.Style.FILL
+    }
+
+    /** 关闭按钮 X 线条画笔 */
+    private val closeLinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#555555")
+        style = Paint.Style.STROKE
+        strokeWidth = closeButtonStroke
+        strokeCap = Paint.Cap.ROUND
     }
 
     /** 标题文字画笔 */
@@ -324,6 +347,9 @@ class AnswerFloatWindow(private val context: Context) : View(context) {
         // ── 第 4 层：返回箭头按钮 ──
         drawBackButton(canvas, halfBorder)
 
+        // ── 第 4b 层：右上角 X 关闭按钮 ──
+        drawCloseButton(canvas, halfBorder, w)
+
         // ── 第 5 层：标题文字 ──
         val titleText = "答案"
         val titleX = (w - titleTextPaint.measureText(titleText)) / 2f
@@ -357,6 +383,22 @@ class AnswerFloatWindow(private val context: Context) : View(context) {
         canvas.drawLine(cx - len, cy, cx - len + len * 0.6f, cy - len * 0.6f, backArrowPaint)
         // 指向左下方的斜线（箭头尖端）
         canvas.drawLine(cx - len, cy, cx - len + len * 0.6f, cy + len * 0.6f, backArrowPaint)
+    }
+
+    /**
+     * 绘制右上角 X 关闭按钮。
+     */
+    private fun drawCloseButton(canvas: Canvas, halfBorder: Float, windowWidth: Float) {
+        val cx = windowWidth - halfBorder - padding - closeButtonRadius
+        val cy = halfBorder + titleBarHeight / 2f
+
+        // 背景圆
+        canvas.drawCircle(cx, cy, closeButtonRadius, closeBgPaint)
+
+        // X 形状
+        val half = closeCrossLen
+        canvas.drawLine(cx - half, cy - half, cx + half, cy + half, closeLinePaint)
+        canvas.drawLine(cx + half, cy - half, cx - half, cy + half, closeLinePaint)
     }
 
     /**
@@ -446,7 +488,7 @@ class AnswerFloatWindow(private val context: Context) : View(context) {
         windowStartX = params.x
         windowStartY = params.y
 
-        // 优先级 1：点击返回箭头按钮
+        // 优先级 1：点击返回箭头按钮（左上角）
         val backCx = borderWidth / 2f + padding + backButtonRadius
         val backCy = borderWidth / 2f + titleBarHeight / 2f
         val backButtonRect = RectF(
@@ -457,6 +499,21 @@ class AnswerFloatWindow(private val context: Context) : View(context) {
         )
         if (backButtonRect.contains(x, y)) {
             onBackPressed?.invoke()
+            touchMode = TouchMode.NONE
+            return
+        }
+
+        // 优先级 1b：点击 X 关闭按钮（右上角）
+        val closeCx = width - borderWidth / 2f - padding - closeButtonRadius
+        val closeCy = borderWidth / 2f + titleBarHeight / 2f
+        val closeButtonRect = RectF(
+            closeCx - closeButtonRadius - touchSlop,
+            closeCy - closeButtonRadius - touchSlop,
+            closeCx + closeButtonRadius + touchSlop,
+            closeCy + closeButtonRadius + touchSlop
+        )
+        if (closeButtonRect.contains(x, y)) {
+            onDismiss?.invoke()
             touchMode = TouchMode.NONE
             return
         }

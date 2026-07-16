@@ -5,8 +5,6 @@ import android.content.Context
 import android.content.DialogInterface
 import android.graphics.Color
 import android.text.SpannableStringBuilder
-import android.text.Spanned
-import android.text.style.ForegroundColorSpan
 import android.view.Gravity
 import android.view.View
 import android.widget.Button
@@ -26,11 +24,15 @@ import kotlinx.coroutines.withContext
  *
  * 功能：
  * - 按学科分类查看题目列表
- * - 查看题目详情
- * - 删除单道题目
- * - 清空题库
+ * - 查看题目详情（题目、选项、答案、解析、学科、来源）
+ * - 删除单道题目（带确认对话框）
+ * - 清空全部题库（带确认对话框）
+ * - 导入题目（通过回调让外部处理）
  */
-class QuestionBankDialog(private val context: Context) {
+class QuestionBankDialog(
+    private val context: Context,
+    private val onImportClick: (() -> Unit)? = null
+) {
 
     private var dialog: AlertDialog? = null
     private lateinit var contentLayout: LinearLayout
@@ -88,17 +90,42 @@ class QuestionBankDialog(private val context: Context) {
                 LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply { setMargins(0, 12, 0, 0) }
         }
+
+        val importButton = Button(context).apply {
+            text = "导入"
+            setTextColor(Color.WHITE)
+            setBackgroundColor(Color.parseColor("#4CAF50"))
+            setOnClickListener {
+                onImportClick?.invoke() ?: Toast.makeText(context, "未设置导入回调", Toast.LENGTH_SHORT).show()
+            }
+            layoutParams = LinearLayout.LayoutParams(
+                0, WRAP, 1f
+            ).apply { setMargins(0, 0, 8, 0) }
+        }
+        buttonRow.addView(importButton)
+
         val clearButton = Button(context).apply {
             text = "清空题库"
             setTextColor(Color.WHITE)
             setBackgroundColor(Color.parseColor("#F44336"))
             setOnClickListener { onClearAll() }
             layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                WRAP
-            )
+                0, WRAP, 1f
+            ).apply { setMargins(8, 0, 8, 0) }
         }
         buttonRow.addView(clearButton)
+
+        val dismissButton = Button(context).apply {
+            text = "关闭"
+            setTextColor(Color.WHITE)
+            setBackgroundColor(Color.parseColor("#9E9E9E"))
+            setOnClickListener { dismiss() }
+            layoutParams = LinearLayout.LayoutParams(
+                0, WRAP, 1f
+            ).apply { setMargins(8, 0, 0, 0) }
+        }
+        buttonRow.addView(dismissButton)
+
         rootLayout.addView(buttonRow)
 
         // 创建对话框
@@ -236,9 +263,7 @@ class QuestionBankDialog(private val context: Context) {
             textSize = 12f
             setTextColor(Color.parseColor("#F44336"))
             setBackgroundColor(Color.TRANSPARENT)
-            setOnClickListener {
-                onDeleteQuestion(q)
-            }
+            setOnClickListener { onDeleteQuestion(q) }
         }
         itemLayout.addView(deleteButton)
 
@@ -253,10 +278,9 @@ class QuestionBankDialog(private val context: Context) {
     }
 
     /**
-     * 显示题目详情。
+     * 显示题目详情（题目、选项、答案、解析、学科、来源）。
      */
     private fun showQuestionDetail(q: QuestionEntity) {
-        val detailDialog = AlertDialog.Builder(context)
         val sb = SpannableStringBuilder()
         sb.append("题目：${q.question}\n\n")
         if (q.options.isNotBlank()) {
@@ -271,15 +295,16 @@ class QuestionBankDialog(private val context: Context) {
         }
         sb.append("来源：${q.source}")
 
-        detailDialog.setTitle("题目详情")
+        AlertDialog.Builder(context)
+            .setTitle("题目详情")
             .setMessage(sb)
             .setPositiveButton("关闭", null)
-            .setNegativeButton("删除此题") { _: android.content.DialogInterface, _: Int -> onDeleteQuestion(q) }
+            .setNegativeButton("删除此题") { _: DialogInterface, _: Int -> onDeleteQuestion(q) }
             .show()
     }
 
     /**
-     * 删除单道题目。
+     * 删除单道题目（带确认对话框）。
      */
     private fun onDeleteQuestion(q: QuestionEntity) {
         AlertDialog.Builder(context)
@@ -299,7 +324,7 @@ class QuestionBankDialog(private val context: Context) {
     }
 
     /**
-     * 清空全部题库。
+     * 清空全部题库（带确认对话框）。
      */
     private fun onClearAll() {
         AlertDialog.Builder(context)
@@ -322,5 +347,4 @@ class QuestionBankDialog(private val context: Context) {
         dialog?.dismiss()
         dialog = null
     }
-
-    }
+}
