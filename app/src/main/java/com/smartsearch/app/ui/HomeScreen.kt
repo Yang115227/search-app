@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.widget.Toast
+import com.google.gson.JsonParser
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -30,12 +31,14 @@ import androidx.lifecycle.LifecycleEventObserver
 import com.smartsearch.app.core.permission.PermissionManager
 import com.smartsearch.app.core.service.FloatingWindowService
 import com.smartsearch.app.core.service.FloatWindowManager
+import com.smartsearch.app.data.local.QuizDatabase
 import com.smartsearch.app.data.parser.ExcelImporter
 import com.smartsearch.app.feature.search.accessibility.AccessibilitySearchService
 import com.smartsearch.app.feature.search.capture.ScreenCaptureService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * 首页 —— 权限校验、悬浮球启动、模式切换的统一入口。
@@ -113,7 +116,7 @@ class HomeActivity : ComponentActivity() {
                     onStartScreenCaptureSearch = { startScreenCaptureSearch() },
                     onImportQuestions = { openFilePicker() },
                     onOpenWrongBook = { /* TODO: 跳转错题本 */ },
-                    onOpenPractice = { /* TODO: 跳转练习页 */ },
+                    onOpenPractice = { startPractice() },
                     permissionStatus = rememberPermissionStatus()
                 )
             }
@@ -208,6 +211,9 @@ class HomeActivity : ComponentActivity() {
      * 第 3 步：授权回调中启动 ScreenCaptureService
      */
     private fun startScreenCaptureSearch() {
+        // 先清理所有悬浮窗状态（防止之前悬浮球残留的 SELECTING 状态）
+        FloatWindowManager.destroyAll()
+
         // 第 1 步：悬浮窗权限
         val floatingStatus = PermissionManager.checkFloatingWindow(this)
         if (floatingStatus != PermissionManager.PermissionStatus.GRANTED) {
@@ -236,6 +242,57 @@ class HomeActivity : ComponentActivity() {
             startService(intent)
         }
         Toast.makeText(this, "悬浮球已启动，点击悬浮球开始搜题", Toast.LENGTH_SHORT).show()
+    }
+
+    // ==================== 练习模式 ====================
+
+    /**
+     * 随机出题练习。
+     * 从题库中随机抽取一道题目，在答案弹窗中展示题目和答案。
+     */
+    private fun startPractice() {
+        CoroutineScope(Dispatchers.Main).launch {
+            val dao = QuizDatabase.getInstance(this@HomeActivity).questionDao()
+            val questions = withContext(Dispatchers.IO) {
+                dao.getRandomQuestions(1)
+            }
+
+            if (questions.isEmpty()) {
+                Toast.makeText(
+                    this@HomeActivity,
+                    "题库为空，请先导入题目",
+                    Toast.LENGTH_SHORT
+                ).show()
+                return@launch
+            }
+
+            val q = questions.first()
+            val answerText = buildString {
+                append("题目：${q.question}")
+                if (q.options.isNotBlank()) {
+                    append("\n\n")
+                    try {
+                        val options = JsonParser.parseString(q.options).asJsonArray
+                        options.forEach { opt ->
+                            append(opt.asString)
+                            append("\n")
+                        }
+                    } catch (_: Exception) {
+                        append(q.options)
+                    }
+                }
+                append("\n\n答案：${q.answer}")
+                if (q.explanation.isNotBlank()) {
+                    append("\n\n解析：${q.explanation}")
+                }
+            }
+
+            FloatWindowManager.showAnswerWindow(
+                this@HomeActivity,
+                answer = answerText,
+                explanation = "随机练习"
+            )
+        }
     }
 
     // ==================== 题库导入 ====================

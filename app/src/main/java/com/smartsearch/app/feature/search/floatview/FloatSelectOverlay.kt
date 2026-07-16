@@ -9,6 +9,7 @@ import android.graphics.PorterDuffXfermode
 import android.graphics.Rect
 import android.graphics.RectF
 import android.os.Build
+import android.text.TextPaint
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -94,6 +95,17 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
     /** 选区最小尺寸 */
     private val minSelectionSize = 80f.dp(80f)
 
+    // ==================== 确认按钮尺寸 ====================
+
+    /** 确认按钮宽度 */
+    private val confirmButtonWidth = 120f.dp(120f)
+
+    /** 确认按钮高度 */
+    private val confirmButtonHeight = 40f.dp(40f)
+
+    /** 确认按钮与选区底部间距 */
+    private val confirmButtonMargin = 20f.dp(20f)
+
     // ==================== 选区矩形（屏幕坐标） ====================
 
     /** 当前选区矩形，初始化时居中，占屏幕宽高 40% */
@@ -148,6 +160,22 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
         style = Paint.Style.STROKE
         strokeWidth = resizeHandleStroke
         strokeCap = Paint.Cap.ROUND
+    }
+
+    // ==================== 确认按钮画笔 ====================
+
+    /** 确认按钮背景画笔（绿色圆角矩形） */
+    private val confirmBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#4CAF50")
+        style = Paint.Style.FILL
+    }
+
+    /** 确认按钮文字画笔 */
+    private val confirmTextPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE
+        textSize = 15f.dp(15f)
+        isFakeBoldText = true
+        textAlign = Paint.Align.CENTER
     }
 
     // ==================== 触摸状态 ====================
@@ -227,6 +255,9 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
 
         // ── 第 5 层：右下角缩放控制点 ──
         drawResizeHandle(canvas)
+
+        // ── 第 6 层：确认选区按钮 ──
+        drawConfirmButton(canvas)
     }
 
     /**
@@ -286,6 +317,30 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
         canvas.drawLine(x, y - len, x, y, resizePaint)
     }
 
+    /**
+     * 绘制底部居中确认选区按钮。
+     *
+     * 绿色圆角矩形 + 白色"确认选区"文字。
+     * 按钮位于选区底部下方 [confirmButtonMargin] 像素处，水平居中。
+     */
+    private fun drawConfirmButton(canvas: Canvas) {
+        val r = selectionRect
+        val btnCenterX = r.centerX()
+        val btnTop = r.bottom + confirmButtonMargin
+        val btnLeft = btnCenterX - confirmButtonWidth / 2f
+        val btnRight = btnCenterX + confirmButtonWidth / 2f
+        val btnBottom = btnTop + confirmButtonHeight
+
+        // 绿色圆角矩形背景
+        val btnRect = RectF(btnLeft, btnTop, btnRight, btnBottom)
+        canvas.drawRoundRect(btnRect, 12f.dp(12f), 12f.dp(12f), confirmBgPaint)
+
+        // 白色文字
+        val textY = btnTop + confirmButtonHeight / 2f -
+                (confirmTextPaint.fontMetrics.ascent + confirmTextPaint.fontMetrics.descent) / 2f
+        canvas.drawText("确认选区", btnCenterX, textY, confirmTextPaint)
+    }
+
     // ==================== 触摸事件处理 ====================
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
@@ -302,7 +357,7 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
     }
 
     /**
-     * 手指按下：判断触摸位置，决定进入 DRAG / RESIZE / 点击关闭 模式。
+     * 手指按下：判断触摸位置，决定进入 DRAG / RESIZE / 点击确认/关闭 模式。
      */
     private fun handleTouchDown(x: Float, y: Float) {
         touchStartX = x
@@ -316,7 +371,21 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
             return
         }
 
-        // 优先级 2：点击缩放控制点
+        // 优先级 2：点击确认选区按钮
+        if (hitConfirmButton(x, y)) {
+            // 确认选区 → 回调坐标
+            val rect = Rect(
+                selectionRect.left.toInt(),
+                selectionRect.top.toInt(),
+                selectionRect.right.toInt(),
+                selectionRect.bottom.toInt()
+            )
+            onRectConfirmed?.invoke(rect)
+            touchMode = TouchMode.NONE
+            return
+        }
+
+        // 优先级 3：点击缩放控制点
         if (RectUtil.hitResizeHandle(x, y, selectionRect, resizeHandleSize, touchSlop)) {
             touchMode = TouchMode.RESIZE
             resizeStartRect.set(selectionRect)
@@ -326,14 +395,14 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
             return
         }
 
-        // 优先级 3：点击选区内部 → 拖动
+        // 优先级 4：点击选区内部 → 拖动
         if (selectionRect.contains(x, y)) {
             touchMode = TouchMode.DRAG
             dragStartRect.set(selectionRect)
             return
         }
 
-        // 优先级 4：点击遮罩区域（选区外）→ 取消选题
+        // 优先级 5：点击遮罩区域（选区外）→ 取消选题
         onDismiss?.invoke()
         touchMode = TouchMode.NONE
     }
@@ -385,25 +454,24 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
     }
 
     /**
-     * 手指抬起：
-     * - DRAG 模式：确认选区，回调坐标
-     * - RESIZE 模式：确认选区，回调坐标
+     * 手指抬起：仅重置触摸模式，不自动确认选区。
+     * 用户需点击「确认选区」按钮来提交选区。
      */
     private fun handleTouchUp(x: Float, y: Float) {
-        when (touchMode) {
-            TouchMode.DRAG, TouchMode.RESIZE -> {
-                // 用户拖拽或缩放后抬起 → 确认选区
-                val rect = Rect(
-                    selectionRect.left.toInt(),
-                    selectionRect.top.toInt(),
-                    selectionRect.right.toInt(),
-                    selectionRect.bottom.toInt()
-                )
-                onRectConfirmed?.invoke(rect)
-            }
-            TouchMode.NONE -> { /* 已处理 */ }
-        }
         touchMode = TouchMode.NONE
+    }
+
+    /**
+     * 判断触摸点是否点击了确认选区按钮。
+     */
+    private fun hitConfirmButton(x: Float, y: Float): Boolean {
+        val r = selectionRect
+        val btnCenterX = r.centerX()
+        val btnTop = r.bottom + confirmButtonMargin
+        val btnLeft = btnCenterX - confirmButtonWidth / 2f - touchSlop
+        val btnRight = btnCenterX + confirmButtonWidth / 2f + touchSlop
+        val btnBottom = btnTop + confirmButtonHeight + touchSlop
+        return x >= btnLeft && x <= btnRight && y >= btnTop && y <= btnBottom
     }
 
     /**
