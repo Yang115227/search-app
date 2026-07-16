@@ -224,43 +224,60 @@ class ScreenCaptureService : Service() {
             return START_NOT_STICKY
         }
 
-        when (intent.action) {
-            ACTION_START_CAPTURE -> {
-                // 获取 MediaProjection Intent
-                val projectionIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    intent.getParcelableExtra(EXTRA_PROJECTION_INTENT, Intent::class.java)
-                } else {
-                    @Suppress("DEPRECATION")
-                    intent.getParcelableExtra(EXTRA_PROJECTION_INTENT)
+        try {
+            when (intent.action) {
+                ACTION_START_CAPTURE -> {
+                    // 获取 MediaProjection Intent
+                    val projectionIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        intent.getParcelableExtra(EXTRA_PROJECTION_INTENT, Intent::class.java)
+                    } else {
+                        @Suppress("DEPRECATION")
+                        intent.getParcelableExtra(EXTRA_PROJECTION_INTENT)
+                    }
+
+                    // 获取选区矩形
+                    val rect = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        intent.getParcelableExtra(EXTRA_SELECTION_RECT, Rect::class.java)
+                    } else {
+                        @Suppress("DEPRECATION")
+                        intent.getParcelableExtra(EXTRA_SELECTION_RECT)
+                    }
+
+                    if (projectionIntent != null) {
+                        startCapture(projectionIntent, rect)
+                    } else {
+                        // 没有 MediaProjection Intent → 尝试自动切回无障碍模式
+                        Log.w(TAG, "缺少 MediaProjection Intent，切换到无障碍模式")
+                        switchToAccessibilityMode()
+                        stopSelf()
+                    }
                 }
 
-                // 获取选区矩形
-                val rect = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    intent.getParcelableExtra(EXTRA_SELECTION_RECT, Rect::class.java)
-                } else {
-                    @Suppress("DEPRECATION")
-                    intent.getParcelableExtra(EXTRA_SELECTION_RECT)
+                ACTION_CAPTURE_ONCE -> {
+                    // 单次截图请求（用于 OCR 识别后重新截图）
+                    captureOnce()
                 }
 
-                if (projectionIntent != null) {
-                    startCapture(projectionIntent, rect)
-                } else {
-                    // 没有 MediaProjection Intent → 尝试自动切回无障碍模式
-                    Log.w(TAG, "缺少 MediaProjection Intent，切换到无障碍模式")
-                    switchToAccessibilityMode()
+                ACTION_STOP -> {
+                    stopCapture()
                     stopSelf()
                 }
             }
-
-            ACTION_CAPTURE_ONCE -> {
-                // 单次截图请求（用于 OCR 识别后重新截图）
-                captureOnce()
+        } catch (e: Exception) {
+            Log.e(TAG, "onStartCommand 异常: ${e.message}", e)
+            // 发生异常时确保前台通知已发出，避免系统判定为"未在时限内启动前台服务"
+            if (!isForegroundStarted) {
+                try {
+                    startForegroundNotification()
+                } catch (_: Exception) {
+                    // 无法启动前台通知，安全停止服务
+                }
             }
-
-            ACTION_STOP -> {
-                stopCapture()
-                stopSelf()
-            }
+            // 尝试优雅降级：切换到无障碍模式
+            try {
+                switchToAccessibilityMode()
+            } catch (_: Exception) { }
+            stopSelf()
         }
 
         return START_NOT_STICKY

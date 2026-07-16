@@ -97,14 +97,15 @@ object ExcelImporter {
      *
      * @param context 上下文
      * @param uri Excel 文件的 Content Uri（如从文件选择器获取）
+     * @param defaultSubject 默认学科，非空时覆盖文件中每道题的学科（或填补空学科）
      * @return [ImportResult]
      */
-    suspend fun importFromUri(context: Context, uri: Uri): ImportResult = withContext(Dispatchers.IO) {
+    suspend fun importFromUri(context: Context, uri: Uri, defaultSubject: String = ""): ImportResult = withContext(Dispatchers.IO) {
         try {
             val inputStream: InputStream = context.contentResolver.openInputStream(uri)
                 ?: return@withContext ImportResult.Error("无法打开文件")
 
-            val result = parseAndImport(inputStream, context)
+            val result = parseAndImport(inputStream, context, defaultSubject)
             inputStream.close()
             result
         } catch (e: SecurityException) {
@@ -120,8 +121,10 @@ object ExcelImporter {
 
     /**
      * 解析 Excel 输入流并批量写入数据库。
+     *
+     * @param defaultSubject 默认学科，非空时覆盖文件中每道题的学科（或填补空学科）
      */
-    private fun parseAndImport(inputStream: InputStream, context: Context): ImportResult {
+    private fun parseAndImport(inputStream: InputStream, context: Context, defaultSubject: String = ""): ImportResult {
         val workbook: Workbook = try {
             WorkbookFactory.create(inputStream)
         } catch (e: Exception) {
@@ -159,7 +162,7 @@ object ExcelImporter {
                 val row = sheet.getRow(rowIndex) ?: continue
                 if (isRowEmpty(row)) continue
 
-                val question = parseRow(row, columnMapping, rowIndex)
+                val question = parseRow(row, columnMapping, rowIndex, defaultSubject)
                 if (question != null) {
                     questions.add(question)
                 }
@@ -233,7 +236,8 @@ object ExcelImporter {
     private fun parseRow(
         row: Row,
         columnMapping: Map<Int, ColumnType>,
-        rowIndex: Int
+        rowIndex: Int,
+        defaultSubject: String = ""
     ): QuestionEntity? {
         val question: String
         val answer: String
@@ -255,6 +259,11 @@ object ExcelImporter {
             explanation = getCellString(row.getCell(2))
             options = getCellString(row.getCell(3))
             subject = getCellString(row.getCell(4))
+        }
+
+        // 如果用户指定了默认学科，覆盖文件中每道题的学科
+        if (defaultSubject.isNotBlank()) {
+            subject = defaultSubject
         }
 
         // 题干和答案不能为空

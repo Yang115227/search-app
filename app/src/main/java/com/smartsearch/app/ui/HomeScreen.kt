@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.util.Log
 import android.widget.Toast
 import com.google.gson.JsonParser
 import androidx.activity.ComponentActivity
@@ -33,6 +34,8 @@ import com.smartsearch.app.core.service.FloatingWindowService
 import com.smartsearch.app.core.service.FloatWindowManager
 import com.smartsearch.app.data.local.QuizDatabase
 import com.smartsearch.app.data.parser.ExcelImporter
+import com.smartsearch.app.feature.search.floatview.PracticeDialog
+import com.smartsearch.app.feature.search.floatview.QuestionBankDialog
 import com.smartsearch.app.feature.search.accessibility.AccessibilitySearchService
 import com.smartsearch.app.feature.search.capture.ScreenCaptureService
 import kotlinx.coroutines.CoroutineScope
@@ -75,31 +78,144 @@ class HomeActivity : ComponentActivity() {
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK && result.data != null) {
-            // 授权成功 → 启动录屏服务
-            ScreenCaptureService.startWithProjection(
-                this,
-                result.data!!,
-                null // 选区由后续选题框回调传入
-            )
-            // 切换到录屏模式，显示选题框
-            FloatWindowManager.showSelectOverlayForScreenCapture(this)
-            Toast.makeText(this, "录屏模式已启动，请框选题目区域", Toast.LENGTH_SHORT).show()
+            try {
+                // 授权成功 → 启动录屏服务
+                ScreenCaptureService.startWithProjection(
+                    this,
+                    result.data!!,
+                    null // 选区由后续选题框回调传入
+                )
+                // 切换到录屏模式，显示选题框
+                FloatWindowManager.showSelectOverlayForScreenCapture(this)
+                Toast.makeText(this, "录屏模式已启动，请框选题目区域", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Log.e(TAG, "启动录屏服务异常: ${e.message}", e)
+                Toast.makeText(this, "启动录屏失败，已切换到无障碍模式", Toast.LENGTH_LONG).show()
+                // 降级到无障碍模式
+                startAccessibilitySearch()
+            }
         } else {
             Toast.makeText(this, "录屏权限未授权，已保持无障碍模式", Toast.LENGTH_SHORT).show()
         }
     }
 
-    /** 文件选择器结果回调 */
+    /** 文件选择结果回调 */
     private val filePickerLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK && result.data?.data != null) {
             val uri: Uri = result.data!!.data!!
-            importExcelFile(uri)
+            // 先弹出分类选择对话框，再执行导入
+            showSubjectPickerDialog(uri)
         }
     }
 
-    // ==================== 生命周期 ====================
+    /** 当前正在等待导入的 Uri（分类选择对话框选定后使用） */
+    private var pendingImportUri: Uri? = null
+
+    /**
+     * 显示分类选择对话框，让用户选择或输入学科分类。
+     * 选定后执行导入。
+     */
+    private fun showSubjectPickerDialog(uri: Uri) {
+        pendingImportUri = uri
+
+        // 在 IO 线程查询已有学科
+        CoroutineScope(Dispatchers.Main).launch {
+            existingSubjects = withContext(Dispatchers.IO) {
+                QuizDatabase.getInstance(this@HomeActivity).questionDao().getAllSubjects()
+            }
+
+            val builder = android.app.AlertDialog.Builder(this@HomeActivity)
+            builder.setTitle("选择学科分类")
+
+            // 将已有学科 + "不分类" + "输入新分类" 组合为选项列表
+            val items = mutableListOf<String>()
+            items.add("不分类")
+            items.addAll(existingSubjects)
+            items.add("输入新分类...")
+
+            builder.setItems(items.toTypedArray()) { _: android.content.DialogInterface, which: Int ->
+                when {
+                    which == 0 -> {
+                        // 不分类 → 直接导入
+                        importWithSubject(uri, "")
+                    }
+                    which == items.size - 1 -> {
+                        // 输入新分类 → 弹出输入对话框
+                        showNewSubjectDialog(uri)
+                    }
+                    else -> {
+                        // 选择已有分类
+                        importWithSubject(uri, existingSubjects[which - 1])
+                    }
+                }
+            }
+            builder.setNegativeButton("取消", null)
+            builder.show()
+        }
+    }
+
+    /** 已有学科列表（缓存） */
+    private var existingSubjects: List<String> = emptyList()
+
+    /**
+     * 显示输入新分类名称的对话框。
+     */
+    private fun showNewSubjectDialog(uri: Uri) {
+        val input = android.widget.EditText(this).apply {
+            hint = "请输入学科名称，如：数学、语文..."
+            setText("")
+        }
+
+        android.app.AlertDialog.Builder(this)
+            .setTitle("输入新分类")
+            .setView(input)
+            .setPositiveButton("确定") { dialogInterface: android.content.DialogInterface, _: Int ->
+                val subject = input.text.toString().trim()
+                importWithSubject(uri, subject)
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    /**
+     * 使用指定学科导入 Excel 文件。
+     */
+    private fun importWithSubject(uri: Uri, subject: String) {
+        pendingImportUri = null
+        Toast.makeText(
+            this,
+            if (subject.isNotBlank()) "正在导入「$subject」题库..."
+            else "正在导入题库，请稍候...",
+            Toast.LENGTH_SHORT
+        ).show()
+
+        CoroutineScope(Dispatchers.Main).launch {
+            val result = ExcelImporter.importFromUri(
+                this@HomeActivity,
+                uri,
+                defaultSubject = subject
+            )
+            when (result) {
+                is ExcelImporter.ImportResult.Success -> {
+                    Toast.makeText(
+                        this@HomeActivity,
+                        "导入成功：${result.count} 条题目" +
+                                if (subject.isNotBlank()) "（$subject）" else "",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+                is ExcelImporter.ImportResult.Error -> {
+                    Toast.makeText(
+                        this@HomeActivity,
+                        "导入失败：${result.message}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -115,7 +231,7 @@ class HomeActivity : ComponentActivity() {
                     onStartAccessibilitySearch = { startAccessibilitySearch() },
                     onStartScreenCaptureSearch = { startScreenCaptureSearch() },
                     onImportQuestions = { openFilePicker() },
-                    onOpenWrongBook = { /* TODO: 跳转错题本 */ },
+                    onOpenQuestionBank = { QuestionBankDialog(this).show() },
                     onOpenPractice = { startPractice() },
                     permissionStatus = rememberPermissionStatus()
                 )
@@ -247,52 +363,11 @@ class HomeActivity : ComponentActivity() {
     // ==================== 练习模式 ====================
 
     /**
-     * 随机出题练习。
-     * 从题库中随机抽取一道题目，在答案弹窗中展示题目和答案。
+     * 打开练习模式对话框。
+     * 支持随机练习和顺序练习，选择答案后提交查看正确答案。
      */
     private fun startPractice() {
-        CoroutineScope(Dispatchers.Main).launch {
-            val dao = QuizDatabase.getInstance(this@HomeActivity).questionDao()
-            val questions = withContext(Dispatchers.IO) {
-                dao.getRandomQuestions(1)
-            }
-
-            if (questions.isEmpty()) {
-                Toast.makeText(
-                    this@HomeActivity,
-                    "题库为空，请先导入题目",
-                    Toast.LENGTH_SHORT
-                ).show()
-                return@launch
-            }
-
-            val q = questions.first()
-            val answerText = buildString {
-                append("题目：${q.question}")
-                if (q.options.isNotBlank()) {
-                    append("\n\n")
-                    try {
-                        val options = JsonParser.parseString(q.options).asJsonArray
-                        options.forEach { opt ->
-                            append(opt.asString)
-                            append("\n")
-                        }
-                    } catch (_: Exception) {
-                        append(q.options)
-                    }
-                }
-                append("\n\n答案：${q.answer}")
-                if (q.explanation.isNotBlank()) {
-                    append("\n\n解析：${q.explanation}")
-                }
-            }
-
-            FloatWindowManager.showAnswerWindow(
-                this@HomeActivity,
-                answer = answerText,
-                explanation = "随机练习"
-            )
-        }
+        PracticeDialog(this).show()
     }
 
     // ==================== 题库导入 ====================
@@ -311,32 +386,6 @@ class HomeActivity : ComponentActivity() {
         }
         filePickerLauncher.launch(intent)
     }
-
-    /**
-     * 导入 Excel 文件到题库数据库。
-     */
-    private fun importExcelFile(uri: Uri) {
-        Toast.makeText(this, "正在导入题库，请稍候...", Toast.LENGTH_SHORT).show()
-        CoroutineScope(Dispatchers.Main).launch {
-            val result = ExcelImporter.importFromUri(this@HomeActivity, uri)
-            when (result) {
-                is ExcelImporter.ImportResult.Success -> {
-                    Toast.makeText(
-                        this@HomeActivity,
-                        "导入成功：${result.count} 条题目",
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
-                is ExcelImporter.ImportResult.Error -> {
-                    Toast.makeText(
-                        this@HomeActivity,
-                        "导入失败：${result.message}",
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
-            }
-        }
-    }
 }
 
 // ==================== Composable UI ====================
@@ -349,7 +398,7 @@ fun HomeScreen(
     onStartAccessibilitySearch: () -> Unit,
     onStartScreenCaptureSearch: () -> Unit,
     onImportQuestions: () -> Unit,
-    onOpenWrongBook: () -> Unit,
+    onOpenQuestionBank: () -> Unit,
     onOpenPractice: () -> Unit,
     permissionStatus: Map<String, PermissionManager.PermissionStatus>
 ) {
@@ -449,11 +498,11 @@ fun HomeScreen(
                 modifier = Modifier.weight(1f)
             )
 
-            // 错题本
+            // 题库管理
             FunctionCard(
-                title = "错题本",
-                subtitle = "查看错题",
-                onClick = onOpenWrongBook,
+                title = "题库管理",
+                subtitle = "查看/删除",
+                onClick = onOpenQuestionBank,
                 modifier = Modifier.weight(1f)
             )
 

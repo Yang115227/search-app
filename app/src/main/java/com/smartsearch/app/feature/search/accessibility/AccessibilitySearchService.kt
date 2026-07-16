@@ -239,6 +239,8 @@ class AccessibilitySearchService : AccessibilityService() {
                 Thread {
                     val answer = QuestionBankSearcher.search(this, questionText)
                     mainHandler.post {
+                        // 清除选区，防止后续无障碍事件触发重复扫描导致弹窗闪烁循环
+                        targetSelectionRect = null
                         FloatWindowManager.showAnswerWindow(
                             this,
                             answer = answer,
@@ -492,6 +494,9 @@ class AccessibilitySearchService : AccessibilityService() {
      * 用户可在弹窗关闭后，通过外部 Activity 调用 [switchToScreenCapture] 完成切换。
      */
     private fun showEmptyResultDialog() {
+        // 清除选区，防止后续无障碍事件触发重新扫描
+        targetSelectionRect = null
+
         // 关闭当前的选题框
         FloatWindowManager.destroyAll()
 

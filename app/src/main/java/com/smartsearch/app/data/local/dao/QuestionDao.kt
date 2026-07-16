@@ -52,6 +52,10 @@ interface QuestionDao {
     @Query("SELECT DISTINCT subject FROM questions WHERE subject != ''")
     suspend fun getAllSubjects(): List<String>
 
+    /** 获取所有题目 */
+    @Query("SELECT * FROM questions ORDER BY imported_at DESC")
+    suspend fun getAllQuestions(): List<QuestionEntity>
+
     /** 获取题库总数 */
     @Query("SELECT COUNT(*) FROM questions")
     suspend fun getCount(): Int
