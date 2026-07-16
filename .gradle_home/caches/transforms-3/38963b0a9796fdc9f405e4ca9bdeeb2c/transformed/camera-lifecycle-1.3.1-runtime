@@ -1,0 +1,9 @@
+androidx.camera.lifecycle.AutoValue_LifecycleCameraRepository_Key
+androidx.camera.lifecycle.ExperimentalCameraProviderConfiguration
+androidx.camera.lifecycle.LifecycleCamera
+androidx.camera.lifecycle.LifecycleCameraProvider
+androidx.camera.lifecycle.LifecycleCameraRepository
+androidx.camera.lifecycle.LifecycleCameraRepository$Key
+androidx.camera.lifecycle.LifecycleCameraRepository$LifecycleCameraRepositoryObserver
+androidx.camera.lifecycle.ProcessCameraProvider
+androidx.camera.lifecycle.ProcessCameraProvider$1

@@ -1,0 +1,371 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "url": "../../animation/1.6.0/animation-1.6.0.module",
+    "group": "androidx.compose.animation",
+    "module": "animation",
+    "version": "1.6.0",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "8.4"
+    }
+  },
+  "variants": [
+    {
+      "name": "releaseApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.usage": "java-api",
+        "org.jetbrains.kotlin.platform.type": "androidJvm"
+      },
+      "dependencies": [
+        {
+          "group": "androidx.annotation",
+          "module": "annotation",
+          "version": {
+            "requires": "1.1.0"
+          }
+        },
+        {
+          "group": "androidx.compose.animation",
+          "module": "animation-core",
+          "version": {
+            "requires": "1.6.0"
+          }
+        },
+        {
+          "group": "androidx.compose.foundation",
+          "module": "foundation-layout",
+          "version": {
+            "requires": "1.6.0"
+          }
+        },
+        {
+          "group": "androidx.compose.runtime",
+          "module": "runtime",
+          "version": {
+            "requires": "1.6.0"
+          }
+        },
+        {
+          "group": "androidx.compose.ui",
+          "module": "ui",
+          "version": {
+            "requires": "1.6.0"
+          }
+        },
+        {
+          "group": "androidx.compose.ui",
+          "module": "ui-geometry",
+          "version": {
+            "requires": "1.6.0"
+          }
+        }
+      ],
+      "dependencyConstraints": [
+        {
+          "group": "androidx.compose.animation",
+          "module": "animation-core",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "reason": "animation is in atomic group androidx.compose.animation"
+        },
+        {
+          "group": "androidx.compose.animation",
+          "module": "animation-tooling-internal",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "reason": "animation is in atomic group androidx.compose.animation"
+        },
+        {
+          "group": "androidx.compose.animation",
+          "module": "animation-graphics",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "reason": "animation is in atomic group androidx.compose.animation"
+        }
+      ],
+      "files": [
+        {
+          "name": "animation-release.aar",
+          "url": "animation-android-1.6.0.aar",
+          "size": 1410529,
+          "sha512": "d0765baea8e070b178405b47dff6ece5217f611f36b77e34eb0e36d5205e6647b40ffadcce3f9e1cdc24f92d01237e52c67f8f73f91480086cab20655d820fa4",
+          "sha256": "1743e5abb01704f7051d2cdc62bead14898296f3ce9de38a51af507fa54d422d",
+          "sha1": "32a9421671d6efe09d67ab9864a826daaa668c05",
+          "md5": "66649fc504704aad14672228ba6b6326"
+        }
+      ]
+    },
+    {
+      "name": "releaseRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "androidJvm"
+      },
+      "dependencies": [
+        {
+          "group": "androidx.annotation",
+          "module": "annotation",
+          "version": {
+            "requires": "1.1.0"
+          },
+          "excludes": [
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-stdlib-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-annotations-common"
+            }
+          ]
+        },
+        {
+          "group": "androidx.compose.animation",
+          "module": "animation-core",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "excludes": [
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-stdlib-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-annotations-common"
+            }
+          ]
+        },
+        {
+          "group": "androidx.compose.foundation",
+          "module": "foundation-layout",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "excludes": [
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-stdlib-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-annotations-common"
+            }
+          ]
+        },
+        {
+          "group": "androidx.compose.runtime",
+          "module": "runtime",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "excludes": [
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-stdlib-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-annotations-common"
+            }
+          ]
+        },
+        {
+          "group": "androidx.compose.ui",
+          "module": "ui",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "excludes": [
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-stdlib-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-annotations-common"
+            }
+          ]
+        },
+        {
+          "group": "androidx.compose.ui",
+          "module": "ui-geometry",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "excludes": [
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-stdlib-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-annotations-common"
+            }
+          ]
+        },
+        {
+          "group": "androidx.compose.ui",
+          "module": "ui-util",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "excludes": [
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-stdlib-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-annotations-common"
+            }
+          ]
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib-common",
+          "version": {
+            "requires": "1.8.22"
+          },
+          "excludes": [
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-stdlib-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-annotations-common"
+            }
+          ]
+        }
+      ],
+      "dependencyConstraints": [
+        {
+          "group": "androidx.compose.animation",
+          "module": "animation-core",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "reason": "animation is in atomic group androidx.compose.animation"
+        },
+        {
+          "group": "androidx.compose.animation",
+          "module": "animation-tooling-internal",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "reason": "animation is in atomic group androidx.compose.animation"
+        },
+        {
+          "group": "androidx.compose.animation",
+          "module": "animation-graphics",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "reason": "animation is in atomic group androidx.compose.animation"
+        }
+      ],
+      "files": [
+        {
+          "name": "animation-release.aar",
+          "url": "animation-android-1.6.0.aar",
+          "size": 1410529,
+          "sha512": "d0765baea8e070b178405b47dff6ece5217f611f36b77e34eb0e36d5205e6647b40ffadcce3f9e1cdc24f92d01237e52c67f8f73f91480086cab20655d820fa4",
+          "sha256": "1743e5abb01704f7051d2cdc62bead14898296f3ce9de38a51af507fa54d422d",
+          "sha1": "32a9421671d6efe09d67ab9864a826daaa668c05",
+          "md5": "66649fc504704aad14672228ba6b6326"
+        }
+      ]
+    },
+    {
+      "name": "releaseSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "fake-sources",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "androidJvm"
+      },
+      "dependencyConstraints": [
+        {
+          "group": "androidx.compose.animation",
+          "module": "animation-core",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "reason": "animation is in atomic group androidx.compose.animation"
+        },
+        {
+          "group": "androidx.compose.animation",
+          "module": "animation-tooling-internal",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "reason": "animation is in atomic group androidx.compose.animation"
+        },
+        {
+          "group": "androidx.compose.animation",
+          "module": "animation-graphics",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "reason": "animation is in atomic group androidx.compose.animation"
+        }
+      ],
+      "files": [
+        {
+          "name": "animation-android-1.6.0-sources.jar",
+          "url": "animation-android-1.6.0-sources.jar",
+          "size": 45933,
+          "sha512": "73cf3e6b10ce19b6d90d494c7d2453bfc35f39f107b4860af4db4fb8ff8b494caca149c4eb781e3cabf787168bb974fced283b2c9583bf9e17898fbaf8c1cee6",
+          "sha256": "f78fa67d6884c868cbb32d45988a54baf9bb4d9939d3a9917cd8a1cb41131daa",
+          "sha1": "58504392487cb6c8f669e1ac71d949b36ef084d1",
+          "md5": "ba025a6d426bac44a7b07c976c911197"
+        }
+      ]
+    }
+  ]
+}

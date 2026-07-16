@@ -30,6 +30,9 @@ coroutines = "1.7.3"
 poi = "5.2.5"          # Apache POI：Excel 解析（EasyExcel 底层）
 gson = "2.10.1"
 
+# ── Material Components（提供 XML 主题） ──
+material = "1.11.0"
+
 # ── 图片加载 ──
 coil = "2.5.0"
 
@@ -94,6 +97,9 @@ poi-ooxml = { group = "org.apache.poi", name = "poi-ooxml", version.ref = "poi" 
 
 # ── JSON ──
 gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
+
+# ── Material Components ──
+material = { group = "com.google.android.material", name = "material", version.ref = "material" }
 
 # ── 图片加载 ──
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }

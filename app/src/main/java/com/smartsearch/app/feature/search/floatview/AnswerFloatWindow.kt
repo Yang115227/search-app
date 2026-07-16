@@ -327,9 +327,9 @@ class AnswerFloatWindow(private val context: Context) : View(context) {
         // ── 第 5 层：标题文字 ──
         val titleText = "答案"
         val titleX = (w - titleTextPaint.measureText(titleText)) / 2f
-        val titleY = halfBorder + (titleBarHeight - titleTextPaint.fontMetrics().let {
+        val titleY = halfBorder + (titleBarHeight - titleTextPaint.fontMetrics.let {
             it.descent - it.ascent
-        }) / 2f - titleTextPaint.fontMetrics().ascent
+        }) / 2f - titleTextPaint.fontMetrics.ascent
         canvas.drawText(titleText, titleX, titleY, titleTextPaint)
 
         // ── 第 6 层：答案内容文字 ──

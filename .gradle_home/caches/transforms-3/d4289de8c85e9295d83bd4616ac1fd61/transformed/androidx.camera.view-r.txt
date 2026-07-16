@@ -1,0 +1,12 @@
+androidx.camera.view
+attr implementationMode
+attr scaleType
+id compatible
+id fillCenter
+id fillEnd
+id fillStart
+id fitCenter
+id fitEnd
+id fitStart
+id performance
+styleable PreviewView implementationMode scaleType

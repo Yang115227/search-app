@@ -1,0 +1,9 @@
+coil.compose.ImageLoaderProvidableCompositionLocal
+coil.compose.ImageLoaderProvidableCompositionLocal$1
+coil.compose.LocalImageLoaderKt
+coil.compose.SingletonAsyncImageKt
+coil.compose.SingletonAsyncImagePainterKt
+coil.compose.SingletonImagePainterKt
+coil.compose.SingletonSubcomposeAsyncImageKt
+coil.compose.SingletonSubcomposeAsyncImageKt$SubcomposeAsyncImage$1
+coil.compose.SingletonSubcomposeAsyncImageKt$SubcomposeAsyncImage$2

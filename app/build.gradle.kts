@@ -5,10 +5,12 @@
 // ============================================
 
 plugins {
-    alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
-    alias(libs.plugins.ksp)
+    id("com.android.application") version "8.1.3"
+    id("org.jetbrains.kotlin.android") version "1.9.22"
+    id("com.google.devtools.ksp") version "1.9.22-1.0.17"
 }
+
+import java.util.Properties
 
 android {
     namespace = "com.smartsearch.app"
@@ -45,7 +47,7 @@ android {
             // 使用默认 debug.keystore，无需额外配置
         }
         create("release") {
-            val signingProps = java.util.Properties()
+            val signingProps = Properties()
             val propsFile = rootProject.file("signing.properties")
             if (propsFile.exists()) {
                 signingProps.load(propsFile.inputStream())
@@ -178,6 +180,9 @@ dependencies {
     // ── Excel 解析（Apache POI / EasyExcel 底层） ──
     implementation(libs.poi)
     implementation(libs.poi.ooxml)
+
+    // ── Material Components（提供 XML 主题如 Theme.Material3） ──
+    implementation(libs.material)
 
     // ── JSON ──
     implementation(libs.gson)

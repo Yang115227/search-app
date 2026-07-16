@@ -1,0 +1,270 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "androidx.compose.material3",
+    "module": "material3",
+    "version": "1.1.2",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "8.0"
+    }
+  },
+  "variants": [
+    {
+      "name": "releaseVariantReleaseApiPublication",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.libraryelements": "aar",
+        "org.gradle.usage": "java-api"
+      },
+      "dependencies": [
+        {
+          "group": "androidx.compose.foundation",
+          "module": "foundation",
+          "version": {
+            "requires": "1.4.1"
+          }
+        },
+        {
+          "group": "androidx.compose.material",
+          "module": "material-icons-core",
+          "version": {
+            "requires": "1.4.1"
+          }
+        },
+        {
+          "group": "androidx.compose.material",
+          "module": "material-ripple",
+          "version": {
+            "requires": "1.4.1"
+          }
+        },
+        {
+          "group": "androidx.compose.runtime",
+          "module": "runtime",
+          "version": {
+            "requires": "1.4.1"
+          }
+        },
+        {
+          "group": "androidx.compose.ui",
+          "module": "ui",
+          "version": {
+            "requires": "1.4.1"
+          }
+        },
+        {
+          "group": "androidx.compose.ui",
+          "module": "ui-graphics",
+          "version": {
+            "requires": "1.4.1"
+          }
+        },
+        {
+          "group": "androidx.compose.ui",
+          "module": "ui-text",
+          "version": {
+            "requires": "1.4.1"
+          }
+        }
+      ],
+      "dependencyConstraints": [
+        {
+          "group": "androidx.compose.material3",
+          "module": "material3-window-size-class",
+          "version": {
+            "requires": "1.1.2"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "material3-1.1.2.aar",
+          "url": "material3-1.1.2.aar",
+          "size": 4241526,
+          "sha512": "c80bd2a5a9b6080ae938cd81744922ad1566322cdecb201efc5fada542c78d449c964693bf2b1fd9fb7959ef4e2eca676bd09edfc58653614fa20739f52e061b",
+          "sha256": "fd9f8fe91d6661afcaf0e9c9cef30b5a196b4def5b28a370f13f2c259c26e482",
+          "sha1": "9cb673a30af4258e08f99c560968c02c82c6b67f",
+          "md5": "2594a02033d9e673788dbfc345614ab0"
+        }
+      ]
+    },
+    {
+      "name": "releaseVariantReleaseRuntimePublication",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.libraryelements": "aar",
+        "org.gradle.usage": "java-runtime"
+      },
+      "dependencies": [
+        {
+          "group": "androidx.activity",
+          "module": "activity-compose",
+          "version": {
+            "requires": "1.5.0"
+          }
+        },
+        {
+          "group": "androidx.compose.animation",
+          "module": "animation-core",
+          "version": {
+            "requires": "1.4.1"
+          }
+        },
+        {
+          "group": "androidx.compose.foundation",
+          "module": "foundation",
+          "version": {
+            "requires": "1.4.1"
+          }
+        },
+        {
+          "group": "androidx.compose.foundation",
+          "module": "foundation-layout",
+          "version": {
+            "requires": "1.4.1"
+          }
+        },
+        {
+          "group": "androidx.compose.material",
+          "module": "material-icons-core",
+          "version": {
+            "requires": "1.4.1"
+          }
+        },
+        {
+          "group": "androidx.compose.material",
+          "module": "material-ripple",
+          "version": {
+            "requires": "1.4.1"
+          }
+        },
+        {
+          "group": "androidx.compose.runtime",
+          "module": "runtime",
+          "version": {
+            "requires": "1.4.1"
+          }
+        },
+        {
+          "group": "androidx.compose.ui",
+          "module": "ui",
+          "version": {
+            "requires": "1.4.1"
+          }
+        },
+        {
+          "group": "androidx.compose.ui",
+          "module": "ui-graphics",
+          "version": {
+            "requires": "1.4.1"
+          }
+        },
+        {
+          "group": "androidx.compose.ui",
+          "module": "ui-text",
+          "version": {
+            "requires": "1.4.1"
+          }
+        },
+        {
+          "group": "androidx.compose.ui",
+          "module": "ui-util",
+          "version": {
+            "requires": "1.4.1"
+          }
+        },
+        {
+          "group": "androidx.lifecycle",
+          "module": "lifecycle-common-java8",
+          "version": {
+            "requires": "2.6.1"
+          }
+        },
+        {
+          "group": "androidx.lifecycle",
+          "module": "lifecycle-runtime",
+          "version": {
+            "requires": "2.6.1"
+          }
+        },
+        {
+          "group": "androidx.lifecycle",
+          "module": "lifecycle-viewmodel",
+          "version": {
+            "requires": "2.6.1"
+          }
+        },
+        {
+          "group": "androidx.savedstate",
+          "module": "savedstate-ktx",
+          "version": {
+            "requires": "1.2.1"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib-common",
+          "version": {
+            "requires": "1.8.20"
+          }
+        }
+      ],
+      "dependencyConstraints": [
+        {
+          "group": "androidx.compose.material3",
+          "module": "material3-window-size-class",
+          "version": {
+            "requires": "1.1.2"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "material3-1.1.2.aar",
+          "url": "material3-1.1.2.aar",
+          "size": 4241526,
+          "sha512": "c80bd2a5a9b6080ae938cd81744922ad1566322cdecb201efc5fada542c78d449c964693bf2b1fd9fb7959ef4e2eca676bd09edfc58653614fa20739f52e061b",
+          "sha256": "fd9f8fe91d6661afcaf0e9c9cef30b5a196b4def5b28a370f13f2c259c26e482",
+          "sha1": "9cb673a30af4258e08f99c560968c02c82c6b67f",
+          "md5": "2594a02033d9e673788dbfc345614ab0"
+        }
+      ]
+    },
+    {
+      "name": "sourcesElements",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.usage": "java-runtime"
+      },
+      "dependencyConstraints": [
+        {
+          "group": "androidx.compose.material3",
+          "module": "material3-window-size-class",
+          "version": {
+            "requires": "1.1.2"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "material3-1.1.2-sources.jar",
+          "url": "material3-1.1.2-sources.jar",
+          "size": 391452,
+          "sha512": "358f640db17ce4870803d0cc0f104dd29f073bb39a15f09639a55c51b5e7256ccd5c18109360a730a912993c0477ef136781e5f91f9a5dc0b6d07490a91099ce",
+          "sha256": "f414696eca059d17134e2a8601cadca75c38f5f0bb1626829cae22ef368c612b",
+          "sha1": "722bb0736dea67b63bcbe04e0ffe507303f4c5fd",
+          "md5": "c24a84cdac534deb2bcec59cef402bc0"
+        }
+      ]
+    }
+  ]
+}

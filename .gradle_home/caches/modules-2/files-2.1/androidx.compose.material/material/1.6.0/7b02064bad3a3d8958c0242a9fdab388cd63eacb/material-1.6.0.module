@@ -1,0 +1,344 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "androidx.compose.material",
+    "module": "material",
+    "version": "1.6.0",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "8.4"
+    }
+  },
+  "variants": [
+    {
+      "name": "androidxSourcesElements",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.usage": "androidx-multiplatform-docs"
+      },
+      "dependencyConstraints": [
+        {
+          "group": "androidx.compose.material",
+          "module": "material-icons-core",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "reason": "material is in atomic group androidx.compose.material"
+        },
+        {
+          "group": "androidx.compose.material",
+          "module": "material-icons-extended",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "reason": "material is in atomic group androidx.compose.material"
+        },
+        {
+          "group": "androidx.compose.material",
+          "module": "material-ripple",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "reason": "material is in atomic group androidx.compose.material"
+        }
+      ],
+      "files": [
+        {
+          "name": "material-1.6.0-multiplatform-sources.jar",
+          "url": "material-1.6.0-multiplatform-sources.jar",
+          "size": 250019,
+          "sha512": "9968dc8adc4c823340140d894930c6f841e990b25d2b8f67eaf396c927dd766ed701807553434ccb4f0e52a60fb76e001ac95863ec84772b143ab46ac0455da1",
+          "sha256": "70e0a02d9c2c99bc6a7969665d35c5868c9585a0868c92409037d67b246ce114",
+          "sha1": "41ea8ad50984659689a2f4535fa38b090fdbdcae",
+          "md5": "79d22acb5da21839d0ccacd237b40a7d"
+        }
+      ]
+    },
+    {
+      "name": "libraryVersionMetadata",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.usage": "library-version-metadata"
+      },
+      "dependencyConstraints": [
+        {
+          "group": "androidx.compose.material",
+          "module": "material-icons-core",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "reason": "material is in atomic group androidx.compose.material"
+        },
+        {
+          "group": "androidx.compose.material",
+          "module": "material-icons-extended",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "reason": "material is in atomic group androidx.compose.material"
+        },
+        {
+          "group": "androidx.compose.material",
+          "module": "material-ripple",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "reason": "material is in atomic group androidx.compose.material"
+        }
+      ],
+      "files": [
+        {
+          "name": "apiLevels.json",
+          "url": "material-1.6.0-versionMetadata.json",
+          "size": 84791,
+          "sha512": "ca933ac84ead0733203bd110b336492a2bdad7c249583b55ed1963cfb089381c96a71aeed29329ee60adc41ea1842aef36643ef7bb80b2ef5c9b551d307f8a99",
+          "sha256": "1eb423340a0c140f6025aafcbb22b31be197d10ee503c1a008a4e9267c45c54b",
+          "sha1": "1c3cb4ecf3480f9af88b119866333744a437ecb0",
+          "md5": "69cc5631624d03287c0d4d4f607064af"
+        }
+      ]
+    },
+    {
+      "name": "metadataApiElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.usage": "kotlin-metadata",
+        "org.jetbrains.kotlin.platform.type": "common"
+      },
+      "dependencies": [
+        {
+          "group": "androidx.compose.animation",
+          "module": "animation-core",
+          "version": {
+            "requires": "1.6.0"
+          }
+        },
+        {
+          "group": "androidx.compose.foundation",
+          "module": "foundation",
+          "version": {
+            "requires": "1.6.0"
+          }
+        },
+        {
+          "group": "androidx.compose.material",
+          "module": "material-icons-core",
+          "version": {
+            "requires": "1.6.0"
+          }
+        },
+        {
+          "group": "androidx.compose.material",
+          "module": "material-ripple",
+          "version": {
+            "requires": "1.6.0"
+          }
+        },
+        {
+          "group": "androidx.compose.runtime",
+          "module": "runtime",
+          "version": {
+            "requires": "1.6.0"
+          }
+        },
+        {
+          "group": "androidx.compose.ui",
+          "module": "ui",
+          "version": {
+            "requires": "1.6.0"
+          }
+        },
+        {
+          "group": "androidx.compose.ui",
+          "module": "ui-text",
+          "version": {
+            "requires": "1.6.0"
+          }
+        }
+      ],
+      "dependencyConstraints": [
+        {
+          "group": "androidx.compose.material",
+          "module": "material-icons-core",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "reason": "material is in atomic group androidx.compose.material"
+        },
+        {
+          "group": "androidx.compose.material",
+          "module": "material-icons-extended",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "reason": "material is in atomic group androidx.compose.material"
+        },
+        {
+          "group": "androidx.compose.material",
+          "module": "material-ripple",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "reason": "material is in atomic group androidx.compose.material"
+        }
+      ],
+      "files": [
+        {
+          "name": "material-metadata-1.6.0.jar",
+          "url": "material-1.6.0.jar",
+          "size": 783,
+          "sha512": "4d421d5e437bfd71e9c05ac9536fbf728f7be6652fd7be66bba72e4429ef4b139a35e4b8b8667deb3968e030f404c369644a610ecb7a929247db9b83ca3bbdda",
+          "sha256": "eca64a1631de1d4a5eaeb98783cb983159cc31b3dcb0820df0ba399156292abc",
+          "sha1": "44fd7b9a7d1568b844faa3ffef9879f12bff7d48",
+          "md5": "e0bd1d4d20775c25b391f6dc3cacd557"
+        }
+      ]
+    },
+    {
+      "name": "metadataSourcesElements",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.platform.type": "common"
+      },
+      "dependencyConstraints": [
+        {
+          "group": "androidx.compose.material",
+          "module": "material-icons-core",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "reason": "material is in atomic group androidx.compose.material"
+        },
+        {
+          "group": "androidx.compose.material",
+          "module": "material-icons-extended",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "reason": "material is in atomic group androidx.compose.material"
+        },
+        {
+          "group": "androidx.compose.material",
+          "module": "material-ripple",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "reason": "material is in atomic group androidx.compose.material"
+        }
+      ],
+      "files": [
+        {
+          "name": "material-kotlin-1.6.0-sources.jar",
+          "url": "material-1.6.0-sources.jar",
+          "size": 219922,
+          "sha512": "bc670ecbeb3523ea82fd4596643964c8aeb9ccee9aa8f63abf6c1dd62b0ad29d605ae4547132caae223508207c454b6d697812f2817e5418332ed27f763b07c9",
+          "sha256": "5aef130100dffcc331577acc963c09e1d0cd664b173073a3fd5d69b5f24dbfe0",
+          "sha1": "32e72587287ddc817aa175a99ffa078026bc4291",
+          "md5": "0e36bd4d318bbcd46d65a781bd9ceefa"
+        }
+      ]
+    },
+    {
+      "name": "releaseApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.usage": "java-api",
+        "org.jetbrains.kotlin.platform.type": "androidJvm"
+      },
+      "available-at": {
+        "url": "../../material-android/1.6.0/material-android-1.6.0.module",
+        "group": "androidx.compose.material",
+        "module": "material-android",
+        "version": "1.6.0"
+      }
+    },
+    {
+      "name": "releaseRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "androidJvm"
+      },
+      "available-at": {
+        "url": "../../material-android/1.6.0/material-android-1.6.0.module",
+        "group": "androidx.compose.material",
+        "module": "material-android",
+        "version": "1.6.0"
+      }
+    },
+    {
+      "name": "releaseSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "fake-sources",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "androidJvm"
+      },
+      "available-at": {
+        "url": "../../material-android/1.6.0/material-android-1.6.0.module",
+        "group": "androidx.compose.material",
+        "module": "material-android",
+        "version": "1.6.0"
+      }
+    },
+    {
+      "name": "desktopApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-api",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "available-at": {
+        "url": "../../material-desktop/1.6.0/material-desktop-1.6.0.module",
+        "group": "androidx.compose.material",
+        "module": "material-desktop",
+        "version": "1.6.0"
+      }
+    },
+    {
+      "name": "desktopRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "available-at": {
+        "url": "../../material-desktop/1.6.0/material-desktop-1.6.0.module",
+        "group": "androidx.compose.material",
+        "module": "material-desktop",
+        "version": "1.6.0"
+      }
+    },
+    {
+      "name": "desktopSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "available-at": {
+        "url": "../../material-desktop/1.6.0/material-desktop-1.6.0.module",
+        "group": "androidx.compose.material",
+        "module": "material-desktop",
+        "version": "1.6.0"
+      }
+    }
+  ]
+}

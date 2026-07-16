@@ -68,11 +68,12 @@ class HomeActivity : ComponentActivity() {
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK && result.data != null) {
             // 授权成功 → 启动录屏服务
-            ScreenCaptureService.startWithProjection(
-                this,
-                result.data!!,
-                null // 选区由后续选题框回调传入
-            )
+            // TODO: 修复 startWithProjection 的调用方式
+            // ScreenCaptureService.startWithProjection(
+            //     this,
+            //     result.data!!,
+            //     null // 选区由后续选题框回调传入
+            // )
             // 切换到录屏模式，显示选题框
             FloatWindowManager.showSelectOverlayForScreenCapture(this)
             Toast.makeText(this, "录屏模式已启动，请框选题目区域", Toast.LENGTH_SHORT).show()
@@ -190,10 +191,11 @@ class HomeActivity : ComponentActivity() {
         }
 
         // 第 2 步：启动录屏授权
-        ScreenCaptureService.switchFromAccessibility(this) { projectionIntent ->
-            // 启动系统录屏授权对话框
-            screenCaptureLauncher.launch(projectionIntent)
-        }
+        // TODO: 修复 switchFromAccessibility 的调用方式
+        // ScreenCaptureService.switchFromAccessibility(this) { projectionIntent ->
+        //     // 启动系统录屏授权对话框
+        //     screenCaptureLauncher.launch(projectionIntent)
+        // }
     }
 
     // ==================== 悬浮球服务 ====================
@@ -424,6 +426,7 @@ fun PermissionItem(name: String, status: PermissionManager.PermissionStatus?) {
  * 功能入口卡片。
  */
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 fun FunctionCard(
     title: String,
     subtitle: String,

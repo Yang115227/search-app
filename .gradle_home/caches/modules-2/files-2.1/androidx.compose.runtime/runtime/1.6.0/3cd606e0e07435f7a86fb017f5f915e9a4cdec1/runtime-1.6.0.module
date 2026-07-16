@@ -1,0 +1,334 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "androidx.compose.runtime",
+    "module": "runtime",
+    "version": "1.6.0",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "8.4"
+    }
+  },
+  "variants": [
+    {
+      "name": "androidxSourcesElements",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.usage": "androidx-multiplatform-docs"
+      },
+      "dependencyConstraints": [
+        {
+          "group": "androidx.compose.runtime",
+          "module": "runtime-livedata",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "reason": "runtime is in atomic group androidx.compose.runtime"
+        },
+        {
+          "group": "androidx.compose.runtime",
+          "module": "runtime-rxjava2",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "reason": "runtime is in atomic group androidx.compose.runtime"
+        },
+        {
+          "group": "androidx.compose.runtime",
+          "module": "runtime-rxjava3",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "reason": "runtime is in atomic group androidx.compose.runtime"
+        },
+        {
+          "group": "androidx.compose.runtime",
+          "module": "runtime-saveable",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "reason": "runtime is in atomic group androidx.compose.runtime"
+        }
+      ],
+      "files": [
+        {
+          "name": "runtime-1.6.0-multiplatform-sources.jar",
+          "url": "runtime-1.6.0-multiplatform-sources.jar",
+          "size": 376439,
+          "sha512": "9ca5e348f4d60233ff411e48edec55c94274323cb9ca829fd0c6e3ba932ba3ca6451d4df90b49678ebcde2e27918c8a5aa932a7bfed494affd2cf1aeb6b12e3a",
+          "sha256": "179ec86bf1e9e9f9c255bcf8a40a7cc3f2d7d2efa4cf33835dd69b44c2ebe163",
+          "sha1": "3cd1a576e704b317467357cd4932140599566a37",
+          "md5": "f571eec5ddff19722c1241104a2bf518"
+        }
+      ]
+    },
+    {
+      "name": "libraryVersionMetadata",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.usage": "library-version-metadata"
+      },
+      "dependencyConstraints": [
+        {
+          "group": "androidx.compose.runtime",
+          "module": "runtime-livedata",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "reason": "runtime is in atomic group androidx.compose.runtime"
+        },
+        {
+          "group": "androidx.compose.runtime",
+          "module": "runtime-rxjava2",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "reason": "runtime is in atomic group androidx.compose.runtime"
+        },
+        {
+          "group": "androidx.compose.runtime",
+          "module": "runtime-rxjava3",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "reason": "runtime is in atomic group androidx.compose.runtime"
+        },
+        {
+          "group": "androidx.compose.runtime",
+          "module": "runtime-saveable",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "reason": "runtime is in atomic group androidx.compose.runtime"
+        }
+      ],
+      "files": [
+        {
+          "name": "apiLevels.json",
+          "url": "runtime-1.6.0-versionMetadata.json",
+          "size": 61495,
+          "sha512": "d5511ca52c2f36b6e11584c53ed0338a1a088726bce6193e39423a902ed76338354ca423575d419192303b87e505a0d5c0b94cc0f679d6811e8499158329b38b",
+          "sha256": "06e805ae802b64169534559c7af0e209c859272948b1d0087d8fa6c283ca2376",
+          "sha1": "6fcf3a942edb4e9ba9da6dd5abd083aedc4f38cb",
+          "md5": "8c1a951ca5eb3d62c814105a3180d47b"
+        }
+      ]
+    },
+    {
+      "name": "metadataApiElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.usage": "kotlin-metadata",
+        "org.jetbrains.kotlin.platform.type": "common"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-core",
+          "version": {
+            "requires": "1.7.1"
+          }
+        }
+      ],
+      "dependencyConstraints": [
+        {
+          "group": "androidx.compose.runtime",
+          "module": "runtime-livedata",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "reason": "runtime is in atomic group androidx.compose.runtime"
+        },
+        {
+          "group": "androidx.compose.runtime",
+          "module": "runtime-rxjava2",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "reason": "runtime is in atomic group androidx.compose.runtime"
+        },
+        {
+          "group": "androidx.compose.runtime",
+          "module": "runtime-rxjava3",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "reason": "runtime is in atomic group androidx.compose.runtime"
+        },
+        {
+          "group": "androidx.compose.runtime",
+          "module": "runtime-saveable",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "reason": "runtime is in atomic group androidx.compose.runtime"
+        }
+      ],
+      "files": [
+        {
+          "name": "runtime-metadata-1.6.0.jar",
+          "url": "runtime-1.6.0.jar",
+          "size": 764,
+          "sha512": "dab4a94fc7eda019bca1d06a4057a61aecdc487f50bb19b8ac49ead521d2f91f74a0b8513465f5e7d333062e4419a93695a8fc8c3d2e3e9e4112fe6360365521",
+          "sha256": "9f40ab0b8cf4e7cb0f593493c2ed96e7155d0e91eb592407597ecd61e2d5a054",
+          "sha1": "39912aaa32797bd642aa4ef543a834c884143412",
+          "md5": "377754d56814d9739a8332b2b1e65b8a"
+        }
+      ]
+    },
+    {
+      "name": "metadataSourcesElements",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.platform.type": "common"
+      },
+      "dependencyConstraints": [
+        {
+          "group": "androidx.compose.runtime",
+          "module": "runtime-livedata",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "reason": "runtime is in atomic group androidx.compose.runtime"
+        },
+        {
+          "group": "androidx.compose.runtime",
+          "module": "runtime-rxjava2",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "reason": "runtime is in atomic group androidx.compose.runtime"
+        },
+        {
+          "group": "androidx.compose.runtime",
+          "module": "runtime-rxjava3",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "reason": "runtime is in atomic group androidx.compose.runtime"
+        },
+        {
+          "group": "androidx.compose.runtime",
+          "module": "runtime-saveable",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "reason": "runtime is in atomic group androidx.compose.runtime"
+        }
+      ],
+      "files": [
+        {
+          "name": "runtime-kotlin-1.6.0-sources.jar",
+          "url": "runtime-1.6.0-sources.jar",
+          "size": 361412,
+          "sha512": "6e105dfa0f02a07908c4c159e868295a3cc6d2a378255c106b195c4037bc904e20e0cc580897f2ad5406555130ecaf296cfa09114a24e35c8b5634b7dc5ffed0",
+          "sha256": "9c2a965963fcdc901ab7448e658625d0982de91bd619c3df999fb0e0883c469a",
+          "sha1": "6397c6b58b0c2899d99282b67de4bd5baea1d297",
+          "md5": "de4a49c7ff9ead1ba19425876ed3fa5d"
+        }
+      ]
+    },
+    {
+      "name": "releaseApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.usage": "java-api",
+        "org.jetbrains.kotlin.platform.type": "androidJvm"
+      },
+      "available-at": {
+        "url": "../../runtime-android/1.6.0/runtime-android-1.6.0.module",
+        "group": "androidx.compose.runtime",
+        "module": "runtime-android",
+        "version": "1.6.0"
+      }
+    },
+    {
+      "name": "releaseRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "androidJvm"
+      },
+      "available-at": {
+        "url": "../../runtime-android/1.6.0/runtime-android-1.6.0.module",
+        "group": "androidx.compose.runtime",
+        "module": "runtime-android",
+        "version": "1.6.0"
+      }
+    },
+    {
+      "name": "releaseSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "fake-sources",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "androidJvm"
+      },
+      "available-at": {
+        "url": "../../runtime-android/1.6.0/runtime-android-1.6.0.module",
+        "group": "androidx.compose.runtime",
+        "module": "runtime-android",
+        "version": "1.6.0"
+      }
+    },
+    {
+      "name": "desktopApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-api",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "available-at": {
+        "url": "../../runtime-desktop/1.6.0/runtime-desktop-1.6.0.module",
+        "group": "androidx.compose.runtime",
+        "module": "runtime-desktop",
+        "version": "1.6.0"
+      }
+    },
+    {
+      "name": "desktopRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "available-at": {
+        "url": "../../runtime-desktop/1.6.0/runtime-desktop-1.6.0.module",
+        "group": "androidx.compose.runtime",
+        "module": "runtime-desktop",
+        "version": "1.6.0"
+      }
+    },
+    {
+      "name": "desktopSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "available-at": {
+        "url": "../../runtime-desktop/1.6.0/runtime-desktop-1.6.0.module",
+        "group": "androidx.compose.runtime",
+        "module": "runtime-desktop",
+        "version": "1.6.0"
+      }
+    }
+  ]
+}

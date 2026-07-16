@@ -1,0 +1,532 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "url": "../../material/1.6.0/material-1.6.0.module",
+    "group": "androidx.compose.material",
+    "module": "material",
+    "version": "1.6.0",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "8.4"
+    }
+  },
+  "variants": [
+    {
+      "name": "releaseApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.usage": "java-api",
+        "org.jetbrains.kotlin.platform.type": "androidJvm"
+      },
+      "dependencies": [
+        {
+          "group": "androidx.annotation",
+          "module": "annotation",
+          "version": {
+            "requires": "1.1.0"
+          }
+        },
+        {
+          "group": "androidx.compose.animation",
+          "module": "animation-core",
+          "version": {
+            "requires": "1.6.0"
+          }
+        },
+        {
+          "group": "androidx.compose.foundation",
+          "module": "foundation",
+          "version": {
+            "requires": "1.6.0"
+          }
+        },
+        {
+          "group": "androidx.compose.material",
+          "module": "material-icons-core",
+          "version": {
+            "requires": "1.6.0"
+          }
+        },
+        {
+          "group": "androidx.compose.material",
+          "module": "material-ripple",
+          "version": {
+            "requires": "1.6.0"
+          }
+        },
+        {
+          "group": "androidx.compose.runtime",
+          "module": "runtime",
+          "version": {
+            "requires": "1.6.0"
+          }
+        },
+        {
+          "group": "androidx.compose.ui",
+          "module": "ui",
+          "version": {
+            "requires": "1.6.0"
+          }
+        },
+        {
+          "group": "androidx.compose.ui",
+          "module": "ui-text",
+          "version": {
+            "requires": "1.6.0"
+          }
+        }
+      ],
+      "dependencyConstraints": [
+        {
+          "group": "androidx.compose.material",
+          "module": "material-icons-core",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "reason": "material is in atomic group androidx.compose.material"
+        },
+        {
+          "group": "androidx.compose.material",
+          "module": "material-icons-extended",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "reason": "material is in atomic group androidx.compose.material"
+        },
+        {
+          "group": "androidx.compose.material",
+          "module": "material-ripple",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "reason": "material is in atomic group androidx.compose.material"
+        }
+      ],
+      "files": [
+        {
+          "name": "material-release.aar",
+          "url": "material-android-1.6.0.aar",
+          "size": 2990008,
+          "sha512": "d1fde1d825edf9d88a9747759491c98c4e2cfbe8eb0054d0733c42ee4d9f3c4d34c68ee6bdae6138c9c93f98150456648ac29f32ab53d99e3258410f66702004",
+          "sha256": "bf2340bdad5f6cecdb3ba577f35bb874fc5b78512b964cd9024596ff9b8246c0",
+          "sha1": "a6db3816d7fbae194b30c1c90c6c364e07317983",
+          "md5": "adfda7003508d6acf634ac00202592e0"
+        }
+      ]
+    },
+    {
+      "name": "releaseRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "androidJvm"
+      },
+      "dependencies": [
+        {
+          "group": "androidx.annotation",
+          "module": "annotation",
+          "version": {
+            "requires": "1.1.0"
+          },
+          "excludes": [
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-stdlib-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-annotations-common"
+            }
+          ]
+        },
+        {
+          "group": "androidx.compose.animation",
+          "module": "animation",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "excludes": [
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-stdlib-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-annotations-common"
+            }
+          ]
+        },
+        {
+          "group": "androidx.compose.animation",
+          "module": "animation-core",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "excludes": [
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-stdlib-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-annotations-common"
+            }
+          ]
+        },
+        {
+          "group": "androidx.compose.foundation",
+          "module": "foundation",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "excludes": [
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-stdlib-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-annotations-common"
+            }
+          ]
+        },
+        {
+          "group": "androidx.compose.foundation",
+          "module": "foundation-layout",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "excludes": [
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-stdlib-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-annotations-common"
+            }
+          ]
+        },
+        {
+          "group": "androidx.compose.material",
+          "module": "material-icons-core",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "excludes": [
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-stdlib-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-annotations-common"
+            }
+          ]
+        },
+        {
+          "group": "androidx.compose.material",
+          "module": "material-ripple",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "excludes": [
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-stdlib-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-annotations-common"
+            }
+          ]
+        },
+        {
+          "group": "androidx.compose.runtime",
+          "module": "runtime",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "excludes": [
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-stdlib-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-annotations-common"
+            }
+          ]
+        },
+        {
+          "group": "androidx.compose.ui",
+          "module": "ui",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "excludes": [
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-stdlib-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-annotations-common"
+            }
+          ]
+        },
+        {
+          "group": "androidx.compose.ui",
+          "module": "ui-text",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "excludes": [
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-stdlib-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-annotations-common"
+            }
+          ]
+        },
+        {
+          "group": "androidx.compose.ui",
+          "module": "ui-util",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "excludes": [
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-stdlib-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-annotations-common"
+            }
+          ]
+        },
+        {
+          "group": "androidx.lifecycle",
+          "module": "lifecycle-runtime",
+          "version": {
+            "requires": "2.6.1"
+          },
+          "excludes": [
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-stdlib-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-annotations-common"
+            }
+          ]
+        },
+        {
+          "group": "androidx.lifecycle",
+          "module": "lifecycle-viewmodel",
+          "version": {
+            "requires": "2.6.1"
+          },
+          "excludes": [
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-stdlib-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-annotations-common"
+            }
+          ]
+        },
+        {
+          "group": "androidx.savedstate",
+          "module": "savedstate",
+          "version": {
+            "requires": "1.2.1"
+          },
+          "excludes": [
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-stdlib-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-annotations-common"
+            }
+          ]
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib-common",
+          "version": {
+            "requires": "1.8.22"
+          },
+          "excludes": [
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-stdlib-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-annotations-common"
+            }
+          ]
+        }
+      ],
+      "dependencyConstraints": [
+        {
+          "group": "androidx.compose.material",
+          "module": "material-icons-core",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "reason": "material is in atomic group androidx.compose.material"
+        },
+        {
+          "group": "androidx.compose.material",
+          "module": "material-icons-extended",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "reason": "material is in atomic group androidx.compose.material"
+        },
+        {
+          "group": "androidx.compose.material",
+          "module": "material-ripple",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "reason": "material is in atomic group androidx.compose.material"
+        }
+      ],
+      "files": [
+        {
+          "name": "material-release.aar",
+          "url": "material-android-1.6.0.aar",
+          "size": 2990008,
+          "sha512": "d1fde1d825edf9d88a9747759491c98c4e2cfbe8eb0054d0733c42ee4d9f3c4d34c68ee6bdae6138c9c93f98150456648ac29f32ab53d99e3258410f66702004",
+          "sha256": "bf2340bdad5f6cecdb3ba577f35bb874fc5b78512b964cd9024596ff9b8246c0",
+          "sha1": "a6db3816d7fbae194b30c1c90c6c364e07317983",
+          "md5": "adfda7003508d6acf634ac00202592e0"
+        }
+      ]
+    },
+    {
+      "name": "releaseSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "fake-sources",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "androidJvm"
+      },
+      "dependencyConstraints": [
+        {
+          "group": "androidx.compose.material",
+          "module": "material-icons-core",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "reason": "material is in atomic group androidx.compose.material"
+        },
+        {
+          "group": "androidx.compose.material",
+          "module": "material-icons-extended",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "reason": "material is in atomic group androidx.compose.material"
+        },
+        {
+          "group": "androidx.compose.material",
+          "module": "material-ripple",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "reason": "material is in atomic group androidx.compose.material"
+        }
+      ],
+      "files": [
+        {
+          "name": "material-android-1.6.0-sources.jar",
+          "url": "material-android-1.6.0-sources.jar",
+          "size": 239737,
+          "sha512": "35a5a68874a2ec3c0f2e175b567bcb1869a813714f961ee82e2223f86567efbf37b00091e2aa4b2bd9ee9cbb36c0e052c9b401368e4824cad0c8bf5863dfe656",
+          "sha256": "44ba366b3f1e0447bdb1fb6faaeed5a4c0f0b2d43b856724dfb8bd106802d3b1",
+          "sha1": "caf61e2fb9c853685d9f1fb6c4befe2207c388f0",
+          "md5": "4119c53ccfe364b3c3e2ec258d7c23e0"
+        }
+      ]
+    }
+  ]
+}

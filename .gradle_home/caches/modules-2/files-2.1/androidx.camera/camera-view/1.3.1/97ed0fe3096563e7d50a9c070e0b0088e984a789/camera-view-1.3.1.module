@@ -1,0 +1,374 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "androidx.camera",
+    "module": "camera-view",
+    "version": "1.3.1",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "8.3-rc-1"
+    }
+  },
+  "variants": [
+    {
+      "name": "releaseVariantReleaseApiPublication",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.libraryelements": "aar",
+        "org.gradle.usage": "java-api"
+      },
+      "dependencies": [
+        {
+          "group": "androidx.annotation",
+          "module": "annotation",
+          "version": {
+            "requires": "1.2.0"
+          }
+        },
+        {
+          "group": "androidx.camera",
+          "module": "camera-core",
+          "version": {
+            "requires": "1.3.1"
+          }
+        },
+        {
+          "group": "androidx.camera",
+          "module": "camera-video",
+          "version": {
+            "requires": "1.3.1"
+          }
+        },
+        {
+          "group": "androidx.lifecycle",
+          "module": "lifecycle-common",
+          "version": {
+            "requires": "2.0.0"
+          }
+        }
+      ],
+      "dependencyConstraints": [
+        {
+          "group": "androidx.camera",
+          "module": "camera-camera2",
+          "version": {
+            "requires": "1.3.1"
+          },
+          "reason": "camera-view is in atomic group androidx.camera"
+        },
+        {
+          "group": "androidx.camera",
+          "module": "camera-core",
+          "version": {
+            "requires": "1.3.1"
+          },
+          "reason": "camera-view is in atomic group androidx.camera"
+        },
+        {
+          "group": "androidx.camera",
+          "module": "camera-extensions",
+          "version": {
+            "requires": "1.3.1"
+          },
+          "reason": "camera-view is in atomic group androidx.camera"
+        },
+        {
+          "group": "androidx.camera",
+          "module": "camera-lifecycle",
+          "version": {
+            "requires": "1.3.1"
+          },
+          "reason": "camera-view is in atomic group androidx.camera"
+        },
+        {
+          "group": "androidx.camera",
+          "module": "camera-video",
+          "version": {
+            "requires": "1.3.1"
+          },
+          "reason": "camera-view is in atomic group androidx.camera"
+        }
+      ],
+      "files": [
+        {
+          "name": "camera-view-1.3.1.aar",
+          "url": "camera-view-1.3.1.aar",
+          "size": 86361,
+          "sha512": "23c5fc60b340fe8aff25e237de36e68b45eb18154924fc7da2b96aaaa44d9b17e593d85c933ee476c2e9e9dc04793682f93e65a3de0a51641f7717bd6ebd7f04",
+          "sha256": "427a0ab06533a9aff9c827dad39d66053ce7e7035fe451be7dd7b8a3ab9e9e58",
+          "sha1": "97365c7874018558499d24f9a8f21bf13ab47a09",
+          "md5": "85e1c861cca6f52a8344e357732133e6"
+        }
+      ]
+    },
+    {
+      "name": "releaseVariantReleaseRuntimePublication",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.libraryelements": "aar",
+        "org.gradle.usage": "java-runtime"
+      },
+      "dependencies": [
+        {
+          "group": "androidx.annotation",
+          "module": "annotation",
+          "version": {
+            "requires": "1.2.0"
+          }
+        },
+        {
+          "group": "androidx.annotation",
+          "module": "annotation-experimental",
+          "version": {
+            "requires": "1.3.1"
+          }
+        },
+        {
+          "group": "androidx.appcompat",
+          "module": "appcompat",
+          "version": {
+            "requires": "1.1.0"
+          }
+        },
+        {
+          "group": "androidx.camera",
+          "module": "camera-core",
+          "version": {
+            "requires": "1.3.1"
+          }
+        },
+        {
+          "group": "androidx.camera",
+          "module": "camera-lifecycle",
+          "version": {
+            "requires": "1.3.1"
+          }
+        },
+        {
+          "group": "androidx.camera",
+          "module": "camera-video",
+          "version": {
+            "requires": "1.3.1"
+          }
+        },
+        {
+          "group": "androidx.concurrent",
+          "module": "concurrent-futures",
+          "version": {
+            "requires": "1.0.0"
+          }
+        },
+        {
+          "group": "androidx.core",
+          "module": "core",
+          "version": {
+            "requires": "1.3.2"
+          }
+        },
+        {
+          "group": "androidx.lifecycle",
+          "module": "lifecycle-common",
+          "version": {
+            "requires": "2.0.0"
+          }
+        },
+        {
+          "group": "com.google.auto.value",
+          "module": "auto-value-annotations",
+          "version": {
+            "requires": "1.6.3"
+          }
+        },
+        {
+          "group": "com.google.guava",
+          "module": "listenablefuture",
+          "version": {
+            "requires": "1.0"
+          }
+        }
+      ],
+      "dependencyConstraints": [
+        {
+          "group": "androidx.camera",
+          "module": "camera-camera2",
+          "version": {
+            "requires": "1.3.1"
+          },
+          "reason": "camera-view is in atomic group androidx.camera"
+        },
+        {
+          "group": "androidx.camera",
+          "module": "camera-core",
+          "version": {
+            "requires": "1.3.1"
+          },
+          "reason": "camera-view is in atomic group androidx.camera"
+        },
+        {
+          "group": "androidx.camera",
+          "module": "camera-extensions",
+          "version": {
+            "requires": "1.3.1"
+          },
+          "reason": "camera-view is in atomic group androidx.camera"
+        },
+        {
+          "group": "androidx.camera",
+          "module": "camera-lifecycle",
+          "version": {
+            "requires": "1.3.1"
+          },
+          "reason": "camera-view is in atomic group androidx.camera"
+        },
+        {
+          "group": "androidx.camera",
+          "module": "camera-video",
+          "version": {
+            "requires": "1.3.1"
+          },
+          "reason": "camera-view is in atomic group androidx.camera"
+        }
+      ],
+      "files": [
+        {
+          "name": "camera-view-1.3.1.aar",
+          "url": "camera-view-1.3.1.aar",
+          "size": 86361,
+          "sha512": "23c5fc60b340fe8aff25e237de36e68b45eb18154924fc7da2b96aaaa44d9b17e593d85c933ee476c2e9e9dc04793682f93e65a3de0a51641f7717bd6ebd7f04",
+          "sha256": "427a0ab06533a9aff9c827dad39d66053ce7e7035fe451be7dd7b8a3ab9e9e58",
+          "sha1": "97365c7874018558499d24f9a8f21bf13ab47a09",
+          "md5": "85e1c861cca6f52a8344e357732133e6"
+        }
+      ]
+    },
+    {
+      "name": "sourcesElements",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.usage": "java-runtime"
+      },
+      "dependencyConstraints": [
+        {
+          "group": "androidx.camera",
+          "module": "camera-camera2",
+          "version": {
+            "requires": "1.3.1"
+          },
+          "reason": "camera-view is in atomic group androidx.camera"
+        },
+        {
+          "group": "androidx.camera",
+          "module": "camera-core",
+          "version": {
+            "requires": "1.3.1"
+          },
+          "reason": "camera-view is in atomic group androidx.camera"
+        },
+        {
+          "group": "androidx.camera",
+          "module": "camera-extensions",
+          "version": {
+            "requires": "1.3.1"
+          },
+          "reason": "camera-view is in atomic group androidx.camera"
+        },
+        {
+          "group": "androidx.camera",
+          "module": "camera-lifecycle",
+          "version": {
+            "requires": "1.3.1"
+          },
+          "reason": "camera-view is in atomic group androidx.camera"
+        },
+        {
+          "group": "androidx.camera",
+          "module": "camera-video",
+          "version": {
+            "requires": "1.3.1"
+          },
+          "reason": "camera-view is in atomic group androidx.camera"
+        }
+      ],
+      "files": [
+        {
+          "name": "camera-view-1.3.1-sources.jar",
+          "url": "camera-view-1.3.1-sources.jar",
+          "size": 72924,
+          "sha512": "3857ac3e19ba315a83c2968c6bb5236bbe16b0584bdc32138c4b3ddf1cf3aa1d02ba8df9f2bc63126cf74cdc110af4f83d5e90d3d89ceecc3f83cecbd456af21",
+          "sha256": "d768ca0b9e136afb12b0ca8f78333d16ca390f518948d6920d50f9267b978406",
+          "sha1": "21ac156d47bc20eff4d7495751a8b3ec85198aca",
+          "md5": "d3b7f478095e1b95c2cba9e19e207249"
+        }
+      ]
+    },
+    {
+      "name": "libraryVersionMetadata",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.usage": "library-version-metadata"
+      },
+      "dependencyConstraints": [
+        {
+          "group": "androidx.camera",
+          "module": "camera-camera2",
+          "version": {
+            "requires": "1.3.1"
+          },
+          "reason": "camera-view is in atomic group androidx.camera"
+        },
+        {
+          "group": "androidx.camera",
+          "module": "camera-core",
+          "version": {
+            "requires": "1.3.1"
+          },
+          "reason": "camera-view is in atomic group androidx.camera"
+        },
+        {
+          "group": "androidx.camera",
+          "module": "camera-extensions",
+          "version": {
+            "requires": "1.3.1"
+          },
+          "reason": "camera-view is in atomic group androidx.camera"
+        },
+        {
+          "group": "androidx.camera",
+          "module": "camera-lifecycle",
+          "version": {
+            "requires": "1.3.1"
+          },
+          "reason": "camera-view is in atomic group androidx.camera"
+        },
+        {
+          "group": "androidx.camera",
+          "module": "camera-video",
+          "version": {
+            "requires": "1.3.1"
+          },
+          "reason": "camera-view is in atomic group androidx.camera"
+        }
+      ],
+      "files": [
+        {
+          "name": "camera-view-1.3.1-versionMetadata.json",
+          "url": "camera-view-1.3.1-versionMetadata.json",
+          "size": 12199,
+          "sha512": "75662eda01df7a944f8e54099f7f1ef380df73b7eb5efe901af8c09351e2895134f847e16cf0d5141e8fe96cb3f91f2e6d708d12ccebf811efff175ed533e647",
+          "sha256": "5f141ed1954b95434adcaedd83d47e6971991ed6d7f0a76e71fb6cfb976207c6",
+          "sha1": "654b2da136a7a502d66088fe2e06db15699ea9da",
+          "md5": "71c9c400cb58bf7b8dbc493add6954f5"
+        }
+      ]
+    }
+  ]
+}

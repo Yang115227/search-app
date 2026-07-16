@@ -6,6 +6,7 @@ import android.util.Log
 import com.smartsearch.app.data.local.QuizDatabase
 import com.smartsearch.app.data.local.entity.QuestionEntity
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import org.apache.poi.ss.usermodel.Cell
 import org.apache.poi.ss.usermodel.CellType
@@ -175,7 +176,9 @@ object ExcelImporter {
             // 分批写入，避免单次事务过大
             var importedCount = 0
             questions.chunked(BATCH_SIZE).forEach { batch ->
-                dao.insertAll(batch)
+                runBlocking(Dispatchers.IO) {
+                    dao.insertAll(batch)
+                }
                 importedCount += batch.size
             }
 
