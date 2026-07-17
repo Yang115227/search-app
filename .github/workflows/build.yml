@@ -230,12 +230,10 @@ jobs:
         run: |
           if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
             echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > smartsearch.keystore
-            cat > signing.properties << EOF
-            storeFile=smartsearch.keystore
-            storePassword=${{ secrets.KEYSTORE_PASSWORD }}
-            keyAlias=${{ secrets.KEY_ALIAS }}
-            keyPassword=${{ secrets.KEY_PASSWORD }}
-            EOF
+            printf "storeFile=smartsearch.keystore\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n" \
+              "${{ secrets.KEYSTORE_PASSWORD }}" \
+              "${{ secrets.KEY_ALIAS }}" \
+              "${{ secrets.KEY_PASSWORD }}" > signing.properties
             echo "✅ 已配置 Release 签名"
           else
             echo "⚠️ 未找到签名密钥，将使用 Debug 签名构建 Release APK"
