@@ -237,6 +237,7 @@ jobs:
             echo "✅ 已配置 Release 签名"
           else
             echo "⚠️ 未找到签名密钥，将生成 Debug 密钥用于 Release APK"
+            mkdir -p ~/.android
             keytool -genkey -v -keystore ~/.android/debug.keystore \
               -storepass android -alias androiddebugkey -keypass android \
               -keyalg RSA -keysize 2048 -validity 10000 \
