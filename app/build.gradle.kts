@@ -56,7 +56,7 @@ android {
                 keyAlias = signingProps.getProperty("keyAlias", "smartsearch")
                 keyPassword = signingProps.getProperty("keyPassword", "android")
             } else {
-                // 无签名配置文件时，回退到 Debug 签名
+                // 无签名配置文件时，使用默认 debug 签名
                 storeFile = file(System.getProperty("user.home") + "/.android/debug.keystore")
                 storePassword = "android"
                 keyAlias = "androiddebugkey"

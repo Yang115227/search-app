@@ -236,7 +236,11 @@ jobs:
               "${{ secrets.KEY_PASSWORD }}" > signing.properties
             echo "✅ 已配置 Release 签名"
           else
-            echo "⚠️ 未找到签名密钥，将使用 Debug 签名构建 Release APK"
+            echo "⚠️ 未找到签名密钥，将生成 Debug 密钥用于 Release APK"
+            keytool -genkey -v -keystore ~/.android/debug.keystore \
+              -storepass android -alias androiddebugkey -keypass android \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US" 2>/dev/null
           fi
 
       - name: 构建 Release APK
