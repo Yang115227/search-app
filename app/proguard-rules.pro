@@ -28,6 +28,11 @@
 -dontwarn javax.xml.stream.**
 -dontwarn org.etsi.**
 -dontwarn com.microsoft.schemas.**
+-dontwarn aQute.bnd.**
+-dontwarn org.osgi.**
+-dontwarn java.awt.**
+-dontwarn com.graphbuilder.**
+-dontwarn org.apache.logging.log4j.**
 
 # ============================================
 # PaddleOCR
@@ -59,3 +64,4 @@
 -keepattributes SourceFile,LineNumberTable
 -keepattributes EnclosingMethod
 -keepattributes InnerClasses
+-ignorewarnings
