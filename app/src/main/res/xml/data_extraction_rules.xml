@@ -2,7 +2,7 @@
 <data-extraction-rules>
     <cloud-backup>
         <exclude domain="database" path="quiz_database.db" />
-        <exclude domain="cache" path="." />
+        <exclude domain="file" path="." />
     </cloud-backup>
     <device-transfer>
         <exclude domain="database" path="quiz_database.db" />
