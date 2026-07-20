@@ -57,6 +57,9 @@ class FloatingWindowService : Service() {
         /** 触摸死区（像素），用于防抖 */
         private const val TOUCH_DEAD_ZONE_PX = 5f
 
+        /** 拖动判定的最小距离（像素），低于此距离视为点击 */
+        private const val DRAG_THRESHOLD_PX = 20f
+
         /** 吸附动画总时长（毫秒） */
         private const val SNAP_DURATION_MS = 200L
     }
@@ -266,7 +269,7 @@ class FloatingWindowService : Service() {
     private fun attachFloatingBall() {
         if (isViewAttached) return
 
-        floatingBallView = FloatingBallView(this)
+        floatingBallView = createFloatingBallView() as FloatingBallView
 
         windowParams = WindowManager.LayoutParams().apply {
             type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -353,9 +356,12 @@ class FloatingWindowService : Service() {
 
                 // 触摸死区：移动距离小于 5px 时忽略，防止微颤
                 if (kotlin.math.abs(dx) > TOUCH_DEAD_ZONE_PX || kotlin.math.abs(dy) > TOUCH_DEAD_ZONE_PX) {
-                    isDragging = true
-                    // 有移动时取消长按检测
+                    // 取消长按检测
                     mainHandler.removeCallbacks(longPressRunnable)
+                }
+                // 拖动判定：移动距离大于 20px 时才真正判定为拖动
+                if (kotlin.math.abs(dx) > DRAG_THRESHOLD_PX || kotlin.math.abs(dy) > DRAG_THRESHOLD_PX) {
+                    isDragging = true
                 }
 
                 if (isDragging && windowParams != null) {
@@ -392,7 +398,7 @@ class FloatingWindowService : Service() {
                         // 已处理
                     }
                     // 点击（短按且未拖拽）→ 弹出功能面板
-                    !isDragging && elapsed < LONG_PRESS_MS && distance < TOUCH_DEAD_ZONE_PX * 4 -> {
+                    !isDragging && elapsed < LONG_PRESS_MS && distance < DRAG_THRESHOLD_PX * 2 -> {
                         showFunctionPanel()
                     }
                     // 拖拽结束 → 吸附边缘
