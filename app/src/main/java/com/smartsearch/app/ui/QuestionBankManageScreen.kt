@@ -36,6 +36,13 @@ import kotlinx.coroutines.withContext
  * - 单选选中机制：选中条目蓝色边框高亮，同一时间只能选择一套题库
  * - 底部操作栏：删除（选中时）、重命名（选中时）
  */
+
+/** 题库条目数据类 */
+data class SubjectCountItem(
+    val subject: String,
+    val count: Int
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun QuestionBankManageScreen(
@@ -80,12 +87,6 @@ fun QuestionBankManageScreen(
     LaunchedEffect(Unit) {
         loadData()
     }
-
-    // 数据类
-    data class SubjectCountItem(
-        val subject: String,
-        val count: Int
-    )
 
     // ==================== 重命名对话框 ====================
     if (showRenameDialog) {

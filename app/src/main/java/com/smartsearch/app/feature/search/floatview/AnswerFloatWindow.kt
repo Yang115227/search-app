@@ -232,7 +232,8 @@ class AnswerFloatWindow(private val context: Context) : View(context) {
         // 文本区域宽度 = 窗口宽度 - 左侧关闭按钮区 - 右侧选区按钮区 - 内边距
         val closeArea = padding + closeButtonRadius * 2 + padding
         val selectArea = padding + selectAreaBtnWidth + padding
-        val textAreaWidth = (currentWidth - closeArea - selectArea - padding * 2).coerceAtLeast(50)
+        val textAreaWidth = (currentWidth - closeArea - selectArea - padding * 2).coerceAtLeast(50f)
+            .toInt()
 
         val displayText = if (answerText.isNotEmpty()) answerText else explanationText
 
