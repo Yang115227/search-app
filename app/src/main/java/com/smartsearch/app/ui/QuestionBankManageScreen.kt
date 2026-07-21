@@ -38,7 +38,7 @@ import kotlinx.coroutines.withContext
  */
 
 /** 题库条目数据类 */
-data class SubjectCountItem(
+private data class SubjectManageItem(
     val subject: String,
     val count: Int
 )
@@ -53,7 +53,7 @@ fun QuestionBankManageScreen(
     val scope = rememberCoroutineScope()
 
     // 题库列表数据
-    var subjects by remember { mutableStateOf<List<SubjectCountItem>>(emptyList()) }
+    var subjects by remember { mutableStateOf<List<SubjectManageItem>>(emptyList()) }
     var selectedSubject by remember { mutableStateOf("") }
     var totalCount by remember { mutableIntStateOf(0) }
     var isLoading by remember { mutableStateOf(true) }
@@ -70,7 +70,7 @@ fun QuestionBankManageScreen(
             val (items, allCount) = withContext(Dispatchers.IO) {
                 val allSubjects = db.questionDao().getAllSubjects()
                 val itemList = allSubjects.map { subject ->
-                    SubjectCountItem(subject, db.questionDao().getCountBySubject(subject))
+                    SubjectManageItem(subject, db.questionDao().getCountBySubject(subject))
                 }
                 val count = db.questionDao().getCount()
                 Pair(itemList, count)
