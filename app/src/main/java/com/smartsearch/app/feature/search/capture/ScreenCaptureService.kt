@@ -87,6 +87,18 @@ class ScreenCaptureService : Service() {
         /** 停止录屏 */
         const val ACTION_STOP = "com.smartsearch.app.action.STOP_CAPTURE"
 
+        /**
+         * 预启动前台服务（通知栏可见），不创建 MediaProjection。
+         * 用于在弹出系统录屏授权对话框前先启动前台服务。
+         */
+        const val ACTION_PREPARE_CAPTURE = "com.smartsearch.app.action.PREPARE_CAPTURE"
+
+        /**
+         * 设置 MediaProjection 授权 Intent（用户授权后调用）。
+         * 将授权 Intent 发送给已启动的服务，服务据此创建 MediaProjection 并开始采集。
+         */
+        const val ACTION_SET_PROJECTION = "com.smartsearch.app.action.SET_PROJECTION"
+
         /** Intent Extra: MediaProjection 授权 Intent */
         const val EXTRA_PROJECTION_INTENT = "projection_intent"
 
@@ -133,6 +145,43 @@ class ScreenCaptureService : Service() {
             } else {
                 context.startService(intent)
             }
+        }
+
+        /**
+         * 预启动前台服务（通知栏可见），不创建 MediaProjection。
+         * 在弹出系统录屏授权对话框前调用，确保系统通知栏显示"录屏搜题运行中"。
+         *
+         * @param context 上下文
+         */
+        fun startForegroundOnly(context: Context) {
+            val intent = Intent(context, ScreenCaptureService::class.java).apply {
+                action = ACTION_PREPARE_CAPTURE
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+        }
+
+        /**
+         * 将用户授权后的 MediaProjection Intent 发送给已启动的录屏服务。
+         * 服务收到后创建 MediaProjection 并开始采集屏幕画面。
+         *
+         * @param context 上下文
+         * @param projectionIntent 用户授权后返回的 MediaProjection Intent
+         * @param selectionRect 选区矩形（可为 null，后续通过 updateSelectionRect 设置）
+         */
+        fun setProjection(context: Context, projectionIntent: Intent, selectionRect: Rect?) {
+            val intent = Intent(context, ScreenCaptureService::class.java).apply {
+                action = ACTION_SET_PROJECTION
+                putExtra(EXTRA_PROJECTION_INTENT, projectionIntent)
+                if (selectionRect != null) {
+                    putExtra(EXTRA_SELECTION_RECT, selectionRect)
+                }
+            }
+            // 服务已启动，使用 startService 发送 Intent
+            context.startService(intent)
         }
 
         /**
@@ -261,6 +310,50 @@ class ScreenCaptureService : Service() {
                 ACTION_STOP -> {
                     stopCapture()
                     stopSelf()
+                }
+
+                /**
+                 * 预启动前台服务（通知栏可见），不创建 MediaProjection。
+                 * 流程：弹出系统录屏授权对话框前调用此动作，确保通知栏显示"录屏搜题运行中"。
+                 */
+                ACTION_PREPARE_CAPTURE -> {
+                    // 启动前台通知（通知栏可见）
+                    if (!isForegroundStarted) {
+                        startForegroundNotification()
+                    }
+                    // 初始化 OCR 引擎
+                    if (!PaddleOCREngine.isReady()) {
+                        PaddleOCREngine.init(this)
+                    }
+                    Log.d(TAG, "录屏前台服务已启动，等待用户授权...")
+                }
+
+                /**
+                 * 设置 MediaProjection 授权 Intent（用户授权后调用）。
+                 * 从授权 Intent 中解析出 MediaProjection，创建 VirtualDisplay 开始采集。
+                 */
+                ACTION_SET_PROJECTION -> {
+                    val projectionIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        intent.getParcelableExtra(EXTRA_PROJECTION_INTENT, Intent::class.java)
+                    } else {
+                        @Suppress("DEPRECATION")
+                        intent.getParcelableExtra(EXTRA_PROJECTION_INTENT)
+                    }
+
+                    val rect = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        intent.getParcelableExtra(EXTRA_SELECTION_RECT, Rect::class.java)
+                    } else {
+                        @Suppress("DEPRECATION")
+                        intent.getParcelableExtra(EXTRA_SELECTION_RECT)
+                    }
+
+                    if (projectionIntent != null) {
+                        startCapture(projectionIntent, rect)
+                    } else {
+                        Log.w(TAG, "ACTION_SET_PROJECTION: 缺少 MediaProjection Intent")
+                        switchToAccessibilityMode()
+                        stopSelf()
+                    }
                 }
             }
         } catch (e: Exception) {

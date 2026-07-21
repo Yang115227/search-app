@@ -87,8 +87,8 @@ class HomeActivity : ComponentActivity() {
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK && result.data != null) {
             try {
-                // 授权成功 → 启动录屏服务
-                ScreenCaptureService.startWithProjection(
+                // 授权成功 → 将 Intent 发送给已启动的前台服务
+                ScreenCaptureService.setProjection(
                     this,
                     result.data!!,
                     null // 选区由后续选题框回调传入
@@ -103,7 +103,12 @@ class HomeActivity : ComponentActivity() {
                 startAccessibilitySearch()
             }
         } else {
-            Toast.makeText(this, "录屏权限未授权，已保持无障碍模式", Toast.LENGTH_SHORT).show()
+            // 用户拒绝 → 停止已启动的前台服务
+            android.content.Intent(this, ScreenCaptureService::class.java).also { stopIntent ->
+                stopIntent.action = "com.smartsearch.app.action.STOP_CAPTURE"
+                startService(stopIntent)
+            }
+            Toast.makeText(this, "录屏权限未授权", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -388,8 +393,9 @@ class HomeActivity : ComponentActivity() {
      * 录屏搜题启动流程。
      *
      * 第 1 步：校验悬浮窗权限
-     * 第 2 步：校验录屏权限 → 启动系统授权对话框
-     * 第 3 步：授权回调中启动 ScreenCaptureService
+     * 第 2 步：启动前台服务（通知栏可见）
+     * 第 3 步：弹出系统录屏权限对话框
+     * 第 4 步：授权回调中发送 Intent 给已启动的服务
      */
     private fun startScreenCaptureSearch() {
         // 先清理所有悬浮窗状态（防止之前悬浮球残留的 SELECTING 状态）
@@ -403,11 +409,14 @@ class HomeActivity : ComponentActivity() {
             return
         }
 
-        // 第 2 步：启动录屏授权
-        ScreenCaptureService.switchFromAccessibility(this) { projectionIntent ->
-            // 启动系统录屏授权对话框
-            screenCaptureLauncher.launch(projectionIntent)
-        }
+        // 第 2 步：启动前台服务（通知栏显示"录屏搜题运行中"）
+        ScreenCaptureService.startForegroundOnly(this)
+
+        // 第 3 步：弹出系统录屏权限对话框
+        val projectionManager = getSystemService(
+            android.content.Context.MEDIA_PROJECTION_SERVICE
+        ) as android.media.projection.MediaProjectionManager
+        screenCaptureLauncher.launch(projectionManager.createScreenCaptureIntent())
     }
 
     // ==================== 悬浮球服务 ====================
