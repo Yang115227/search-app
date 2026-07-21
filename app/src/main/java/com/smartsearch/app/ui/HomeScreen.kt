@@ -269,7 +269,7 @@ class HomeActivity : ComponentActivity() {
                             onStartAccessibilitySearch = { startAccessibilitySearch() },
                             onStartScreenCaptureSearch = { startScreenCaptureSearch() },
                             onImportQuestions = { openFilePicker() },
-                            onOpenQuestionBank = { QuestionBankDialog(this@HomeActivity, onImportClick = { openFilePicker() }).show() },
+                            onOpenQuestionBank = { navController.navigate("question_bank_manage") },
                             onOpenPractice = { startPractice() },
                             onOpenWrongBook = { openWrongBook() },
                             permissionStatus = rememberPermissionStatus(),
@@ -285,6 +285,12 @@ class HomeActivity : ComponentActivity() {
                                 val encodedSubject = URLEncoder.encode(subject, "UTF-8")
                                 navController.navigate("answer/$encodedSubject/$mode")
                             }
+                        )
+                    }
+                    composable("question_bank_manage") {
+                        QuestionBankManageScreen(
+                            onBack = { navController.popBackStack() },
+                            onImportClick = { openFilePicker() }
                         )
                     }
                     composable(

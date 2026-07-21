@@ -30,6 +30,14 @@ interface QuestionDao {
     @Query("DELETE FROM questions")
     suspend fun deleteAll()
 
+    /** 按学科删除所有题目 */
+    @Query("DELETE FROM questions WHERE subject = :subject")
+    suspend fun deleteBySubject(subject: String)
+
+    /** 更新学科名称（重命名） */
+    @Query("UPDATE questions SET subject = :newSubject WHERE subject = :oldSubject")
+    suspend fun updateSubject(oldSubject: String, newSubject: String)
+
     // ==================== 查询 ====================
 
     /** 按 ID 精确查询 */

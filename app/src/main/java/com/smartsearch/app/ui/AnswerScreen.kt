@@ -70,67 +70,92 @@ fun AnswerScreen(
 
     // ── 加载题目 ──
     LaunchedEffect(subject, mode) {
-        val db = QuizDatabase.getInstance(context)
-        withContext(Dispatchers.IO) {
-            // 检查是否有未完成的练习会话
-            val existingSession = db.practiceSessionDao().getLatestIncompleteSession()
-            if (existingSession != null &&
-                existingSession.subject == subject &&
-                existingSession.mode == mode
-            ) {
-                // 恢复进度
-                val ids: List<Long> = gson.fromJson(
-                    existingSession.questionIds,
-                    object : TypeToken<List<Long>>() {}.type
-                )
-                val loadedQuestions = ids.mapNotNull { id -> db.questionDao().findById(id) }
-                val savedAnswers: Map<Long, Int> = gson.fromJson(
-                    existingSession.answers,
-                    object : TypeToken<Map<Long, Int>>() {}.type
-                ) ?: emptyMap()
-                val savedBookmarks: List<Long> = gson.fromJson(
-                    existingSession.bookmarks,
-                    object : TypeToken<List<Long>>() {}.type
-                ) ?: emptyList()
-                bookmarks = savedBookmarks.toSet()
-
-                questions = loadedQuestions
-                currentIndex = existingSession.currentIndex
-                answers = savedAnswers
-                bookmarks = savedBookmarks.toSet()
-                correctCount = existingSession.correctCount
-                answeredCount = existingSession.answeredCount
-                sessionId = existingSession.id
-                startTime = existingSession.startTime
-
-                // 恢复已提交状态
-                submittedQuestions = savedAnswers.keys
-            } else {
-                // 创建新会话
-                val allQuestions = if (subject.isBlank()) {
-                    db.questionDao().getAllQuestions()
-                } else {
-                    db.questionDao().findBySubject(subject)
+        try {
+            val db = QuizDatabase.getInstance(context)
+            withContext(Dispatchers.IO) {
+                // 检查是否有未完成的练习会话
+                val existingSession = try {
+                    db.practiceSessionDao().getLatestIncompleteSession()
+                } catch (e: Exception) {
+                    Log.e("AnswerScreen", "查询练习会话异常: ${e.message}", e)
+                    null
                 }
-                val orderedQuestions = if (mode == "RANDOM") {
-                    allQuestions.shuffled()
-                } else {
-                    allQuestions.sortedBy { it.id }
-                }
-                questions = orderedQuestions
+                if (existingSession != null &&
+                    existingSession.subject == subject &&
+                    existingSession.mode == mode
+                ) {
+                    // 恢复进度
+                    val ids: List<Long> = try {
+                        gson.fromJson(
+                            existingSession.questionIds,
+                            object : TypeToken<List<Long>>() {}.type
+                        )
+                    } catch (e: Exception) {
+                        Log.e("AnswerScreen", "解析题目ID列表异常: ${e.message}", e)
+                        emptyList()
+                    }
+                    val loadedQuestions = ids.mapNotNull { id -> db.questionDao().findById(id) }
+                    val savedAnswers: Map<Long, Int> = try {
+                        gson.fromJson(
+                            existingSession.answers,
+                            object : TypeToken<Map<Long, Int>>() {}.type
+                        ) ?: emptyMap()
+                    } catch (e: Exception) {
+                        Log.e("AnswerScreen", "解析答案数据异常: ${e.message}", e)
+                        emptyMap()
+                    }
+                    val savedBookmarks: List<Long> = try {
+                        gson.fromJson(
+                            existingSession.bookmarks,
+                            object : TypeToken<List<Long>>() {}.type
+                        ) ?: emptyList()
+                    } catch (e: Exception) {
+                        Log.e("AnswerScreen", "解析收藏数据异常: ${e.message}", e)
+                        emptyList()
+                    }
+                    bookmarks = savedBookmarks.toSet()
 
-                if (orderedQuestions.isNotEmpty()) {
-                    val ids = orderedQuestions.map { it.id }
-                    val newSession = PracticeSessionEntity(
-                        subject = subject,
-                        mode = mode,
-                        questionIds = gson.toJson(ids),
-                        currentIndex = 0,
-                        startTime = System.currentTimeMillis()
-                    )
-                    sessionId = db.practiceSessionDao().insert(newSession)
+                    questions = loadedQuestions
+                    currentIndex = existingSession.currentIndex
+                    answers = savedAnswers
+                    bookmarks = savedBookmarks.toSet()
+                    correctCount = existingSession.correctCount
+                    answeredCount = existingSession.answeredCount
+                    sessionId = existingSession.id
+                    startTime = existingSession.startTime
+
+                    // 恢复已提交状态
+                    submittedQuestions = savedAnswers.keys
+                } else {
+                    // 创建新会话
+                    val allQuestions = if (subject.isBlank()) {
+                        db.questionDao().getAllQuestions()
+                    } else {
+                        db.questionDao().findBySubject(subject)
+                    }
+                    val orderedQuestions = if (mode == "RANDOM") {
+                        allQuestions.shuffled()
+                    } else {
+                        allQuestions.sortedBy { it.id }
+                    }
+                    questions = orderedQuestions
+
+                    if (orderedQuestions.isNotEmpty()) {
+                        val ids = orderedQuestions.map { it.id }
+                        val newSession = PracticeSessionEntity(
+                            subject = subject,
+                            mode = mode,
+                            questionIds = gson.toJson(ids),
+                            currentIndex = 0,
+                            startTime = System.currentTimeMillis()
+                        )
+                        sessionId = db.practiceSessionDao().insert(newSession)
+                    }
                 }
             }
+        } catch (e: Exception) {
+            Log.e("AnswerScreen", "加载题目异常: ${e.message}", e)
+            // 保持空状态，UI 会显示"暂无题目"
         }
         isLoading = false
     }
