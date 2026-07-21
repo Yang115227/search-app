@@ -88,10 +88,11 @@ fun AnswerScreen(
                     existingSession.answers,
                     object : TypeToken<Map<Long, Int>>() {}.type
                 ) ?: emptyMap()
-                val savedBookmarks: Set<Long> = gson.fromJson(
+                val savedBookmarks: List<Long> = gson.fromJson(
                     existingSession.bookmarks,
                     object : TypeToken<List<Long>>() {}.type
-                )?.toSet() ?: emptySet()
+                ) ?: emptyList()
+                bookmarks = savedBookmarks.toSet()
 
                 questions = loadedQuestions
                 currentIndex = existingSession.currentIndex
@@ -402,9 +403,7 @@ fun AnswerScreen(
                     progress = { (currentIndex + 1).toFloat() / questions.size },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(4.dp),
-                    color = Color(0xFF4CAF50),
-                    trackColor = Color(0xFFE0E0E0)
+                        .height(4.dp)
                 )
 
                 // 进度文本
