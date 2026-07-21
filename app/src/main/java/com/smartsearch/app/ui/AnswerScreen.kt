@@ -97,7 +97,7 @@ fun AnswerScreen(
                 questions = loadedQuestions
                 currentIndex = existingSession.currentIndex
                 answers = savedAnswers
-                bookmarks = savedBookmarks
+                bookmarks = savedBookmarks.toSet()
                 correctCount = existingSession.correctCount
                 answeredCount = existingSession.answeredCount
                 sessionId = existingSession.id
@@ -399,8 +399,9 @@ fun AnswerScreen(
                     .padding(padding)
             ) {
                 // 进度条
+                val progressValue = (currentIndex + 1).toFloat() / questions.size
                 LinearProgressIndicator(
-                    progress = { (currentIndex + 1).toFloat() / questions.size },
+                    progress = progressValue,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(4.dp)
