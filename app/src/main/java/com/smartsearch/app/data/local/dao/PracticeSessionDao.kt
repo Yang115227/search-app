@@ -36,3 +36,4 @@ interface PracticeSessionDao {
     /** 清空所有练习会话 */
     @Query("DELETE FROM practice_sessions")
     suspend fun deleteAll()
+}
