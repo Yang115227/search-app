@@ -225,8 +225,26 @@ class HomeActivity : ComponentActivity() {
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleScreenCaptureIntent(intent)
+    }
+
+    /**
+     * 处理从悬浮球服务发起的录屏搜题请求。
+     * 悬浮球点击「录屏搜题」→ 启动 HomeActivity → 在此方法中触发录屏授权流程。
+     */
+    private fun handleScreenCaptureIntent(intent: Intent?) {
+        if (intent?.getBooleanExtra(FloatingWindowService.EXTRA_START_SCREEN_CAPTURE, false) == true) {
+            startScreenCaptureSearch()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // 处理从悬浮球发起的录屏搜题请求
+        handleScreenCaptureIntent(intent)
 
         // 初始化悬浮窗管理器
         FloatWindowManager.init(this)

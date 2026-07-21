@@ -48,6 +48,9 @@ class FloatingWindowService : Service() {
         private const val NOTIFICATION_CHANNEL_ID = "floating_window_channel"
         private const val NOTIFICATION_ID = 1001
 
+        /** Intent Extra: 启动录屏搜题 */
+        const val EXTRA_START_SCREEN_CAPTURE = "start_screen_capture"
+
         /** 悬浮球默认边长 dp */
         private const val BALL_SIZE_DP = 52f
 
@@ -484,7 +487,7 @@ class FloatingWindowService : Service() {
             }
             onScreenCaptureClick = {
                 dismissFunctionPanel()
-                FloatWindowManager.switchToScreenCaptureMode(this@FloatingWindowService)
+                startScreenCaptureMode()
             }
             onAccessibilityClick = {
                 dismissFunctionPanel()
@@ -540,6 +543,31 @@ class FloatingWindowService : Service() {
                             "或点击下方按钮切换到录屏模式。"
                 )
             }
+        }
+    }
+
+    /**
+     * 启动录屏搜题模式。
+     *
+     * 流程：
+     * 1. 检查悬浮窗权限
+     * 2. 如已授权，启动 HomeActivity 触发系统录屏授权对话框
+     * 3. 用户授权后创建 MediaProjection，弹出选区框
+     */
+    private fun startScreenCaptureMode() {
+        // 检查悬浮窗权限
+        if (PermissionManager.checkFloatingWindow(this) != PermissionManager.PermissionStatus.GRANTED) {
+            notifyPermissionRequired()
+            return
+        }
+
+        // 启动 HomeActivity 触发录屏授权流程
+        val intent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra(EXTRA_START_SCREEN_CAPTURE, true)
+        }
+        if (intent != null) {
+            startActivity(intent)
         }
     }
 
