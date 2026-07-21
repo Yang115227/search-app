@@ -2,6 +2,8 @@ package com.smartsearch.app.core.service
 
 import android.content.Context
 import android.graphics.Rect
+import android.os.Handler
+import android.os.Looper
 import com.smartsearch.app.feature.search.capture.ScreenCaptureService
 import com.smartsearch.app.feature.search.floatview.AnswerFloatWindow
 import com.smartsearch.app.feature.search.floatview.FloatSelectOverlay
@@ -14,35 +16,27 @@ import com.smartsearch.app.feature.search.floatview.FunctionPanelView
  * # 生命周期状态机
  * ```
  *   IDLE ──showSelectOverlay()──▶ SELECTING
- *   SELECTING ──用户确认选区──▶ ANSWERING   (同时销毁 SelectOverlay)
- *   ANSWERING ──点击返回──▶ SELECTING       (销毁 AnswerWindow，重新打开 SelectOverlay)
- *   ANSWERING ──点击关闭──▶ IDLE            (销毁一切)
- *   SELECTING ──点击X关闭──▶ IDLE            (销毁一切)
+ *   SELECTING ──点击"开始搜题"──▶ CONTINUOUS_SEARCHING  (保留 Overlay，显示 AnswerWindow)
+ *   CONTINUOUS_SEARCHING ──拖拽/缩放选区──▶ 更新搜索范围，继续搜题
+ *   CONTINUOUS_SEARCHING ──每 3 秒──▶ 自动重新搜题
+ *   CONTINUOUS_SEARCHING ──关闭答案弹窗──▶ IDLE         (销毁一切)
+ *   ANSWERING ──点击返回──▶ SELECTING                   (销毁 AnswerWindow，重新打开 Overlay)
+ *   ANSWERING ──点击关闭──▶ IDLE                        (销毁一切)
+ *   SELECTING ──点击X关闭──▶ IDLE                       (销毁一切)
  * ```
  *
- * # 使用方式
- * ```kotlin
- * // 初始化（在 Application.onCreate 中调用一次）
- * FloatWindowManager.init(context)
- *
- * // 显示选题框
- * FloatWindowManager.showSelectOverlay { rect -> /* 拿到选区坐标 */ }
- *
- * // 显示答案弹窗
- * FloatWindowManager.showAnswerWindow("答案内容", "解析内容")
- *
- * // 销毁所有
- * FloatWindowManager.destroyAll()
- * ```
- *
- * 兼容 Android 10 (API 29) ~ Android 14 (API 34)，无第三方依赖。
+ * # 连续搜题模式
+ * - 点击"开始搜题"后进入连续搜题模式，选区框和答案弹窗同时可见
+ * - 用户可拖拽/缩放选区，松开后自动重新搜题
+ * - 每 3 秒自动轮询识别一次
+ * - 点击答案弹窗的关闭按钮退出连续搜题模式
  */
 object FloatWindowManager {
 
     /** 当前悬浮窗状态 */
     private var currentState = FloatWindowState.IDLE
 
-    // ── 两个悬浮窗实例 ──
+    // ── 悬浮窗实例 ──
     private var selectOverlay: FloatSelectOverlay? = null
     private var answerWindow: AnswerFloatWindow? = null
 
@@ -53,8 +47,31 @@ object FloatWindowManager {
     /** 答案弹窗关闭回调 */
     private var onAnswerDismissed: (() -> Unit)? = null
 
+    /** 连续搜题模式下的搜索回调（每次需要搜索时触发） */
+    private var onContinuousSearch: ((Rect) -> Unit)? = null
+
     // ── 上下文 ──
     private var appContext: Context? = null
+
+    // ── 连续搜题定时器 ──
+    private val searchHandler = Handler(Looper.getMainLooper())
+    private val searchRunnable = object : Runnable {
+        override fun run() {
+            if (currentState == FloatWindowState.CONTINUOUS_SEARCHING) {
+                // 获取当前选区位置，触发自动搜索
+                val overlay = selectOverlay
+                if (overlay != null) {
+                    val rect = overlay.getSelectionRect()
+                    onContinuousSearch?.invoke(rect)
+                }
+                // 继续定时轮询
+                searchHandler.postDelayed(this, CONTINUOUS_SEARCH_INTERVAL_MS)
+            }
+        }
+    }
+
+    /** 连续搜题轮询间隔（毫秒） */
+    private const val CONTINUOUS_SEARCH_INTERVAL_MS = 3000L
 
     // ==================== 状态枚举 ====================
 
@@ -63,11 +80,13 @@ object FloatWindowManager {
      * - [IDLE]：所有悬浮窗均已销毁
      * - [SELECTING]：选题框正在显示
      * - [ANSWERING]：答案弹窗正在显示
+     * - [CONTINUOUS_SEARCHING]：连续搜题模式（选题框 + 答案弹窗同时显示）
      */
     enum class FloatWindowState {
         IDLE,
         SELECTING,
-        ANSWERING
+        ANSWERING,
+        CONTINUOUS_SEARCHING
     }
 
     /**
@@ -102,12 +121,13 @@ object FloatWindowManager {
      * 如果当前已有选题框，不会重复创建。
      *
      * @param context 上下文（建议传 Activity）
-     * @param onRectSelected 选区确认回调，用户拖拽确认选区后返回屏幕坐标 Rect
+     * @param onSearch 搜索回调，用户点击"开始搜题"后触发，连续模式每次搜题也会触发
      */
-    fun showSelectOverlay(context: Context, onRectSelected: (Rect) -> Unit) {
+    fun showSelectOverlay(context: Context, onSearch: (Rect) -> Unit) {
         val ctx = context.applicationContext
         // 缓存回调
-        this.onRectSelected = onRectSelected
+        this.onRectSelected = onSearch
+        this.onContinuousSearch = onSearch
 
         // 如果已有答案弹窗，先销毁
         if (currentState == FloatWindowState.ANSWERING) {
@@ -115,7 +135,8 @@ object FloatWindowManager {
         }
 
         // 如果已有选题框，不重复创建
-        if (currentState == FloatWindowState.SELECTING) return
+        if (currentState == FloatWindowState.SELECTING ||
+            currentState == FloatWindowState.CONTINUOUS_SEARCHING) return
 
         selectOverlay = FloatSelectOverlay(ctx).apply {
             // 点击 X 关闭按钮 → 销毁
@@ -123,10 +144,17 @@ object FloatWindowManager {
                 destroyAll()
             }
 
-            // 用户确认选区 → 回调坐标，销毁选题框
-            onRectConfirmed = { rect ->
+            // 点击"开始搜题" → 进入连续搜题模式
+            onStartContinuousSearch = { rect ->
                 this@FloatWindowManager.onRectSelected?.invoke(rect)
-                destroySelectOverlay()
+                startContinuousSearch(ctx)
+            }
+
+            // 连续搜题模式下，选区变化触发重新搜题
+            onSelectionChanged = { rect ->
+                if (currentState == FloatWindowState.CONTINUOUS_SEARCHING) {
+                    this@FloatWindowManager.onContinuousSearch?.invoke(rect)
+                }
             }
 
             // 附加到窗口
@@ -136,12 +164,38 @@ object FloatWindowManager {
         currentState = FloatWindowState.SELECTING
     }
 
+    // ==================== 连续搜题模式 ====================
+
+    /**
+     * 启动连续搜题模式。
+     *
+     * 保留选题框（用户可继续拖拽/缩放），同时显示答案弹窗，
+     * 并启动 3 秒轮询定时器。
+     */
+    private fun startContinuousSearch(context: Context) {
+        // 标记为连续搜题模式
+        selectOverlay?.isContinuousMode = true
+        currentState = FloatWindowState.CONTINUOUS_SEARCHING
+
+        // 启动 3 秒轮询
+        searchHandler.removeCallbacks(searchRunnable)
+        searchHandler.postDelayed(searchRunnable, CONTINUOUS_SEARCH_INTERVAL_MS)
+    }
+
+    /**
+     * 停止连续搜题模式，回到 IDLE。
+     */
+    private fun stopContinuousSearch() {
+        searchHandler.removeCallbacks(searchRunnable)
+        selectOverlay?.isContinuousMode = false
+    }
+
     // ==================== 显示答案弹窗 ====================
 
     /**
      * 显示答案弹窗 [AnswerFloatWindow]。
      *
-     * 如果当前有选题框，会先销毁再显示答案弹窗。
+     * 在连续搜题模式下，不会销毁选题框，两者同时显示。
      *
      * @param context 上下文
      * @param answer 答案文本
@@ -157,7 +211,15 @@ object FloatWindowManager {
         val ctx = context.applicationContext
         this.onAnswerDismissed = onDismissed
 
-        // 如果已有选题框，先销毁
+        // 连续搜题模式下，保留选题框，只显示答案弹窗
+        if (currentState == FloatWindowState.CONTINUOUS_SEARCHING) {
+            // 如果已有答案弹窗，先销毁旧的
+            destroyAnswerWindow()
+            createAndShowAnswerWindow(ctx, answer, explanation)
+            return
+        }
+
+        // 普通模式：先销毁选题框
         if (currentState == FloatWindowState.SELECTING) {
             destroySelectOverlay()
         }
@@ -167,31 +229,48 @@ object FloatWindowManager {
             destroyAnswerWindow()
         }
 
+        createAndShowAnswerWindow(ctx, answer, explanation)
+        currentState = FloatWindowState.ANSWERING
+    }
+
+    /**
+     * 创建并显示答案弹窗。
+     */
+    private fun createAndShowAnswerWindow(
+        ctx: Context,
+        answer: String,
+        explanation: String
+    ) {
         answerWindow = AnswerFloatWindow(ctx).apply {
-            // 设置答案内容
             setContent(answer, explanation)
 
             // 点击返回箭头 → 销毁答案弹窗，重新打开选题框
-            // 使用 appContext 而非原始 context，避免 Activity 销毁后持有悬空引用
             onBackPressed = {
                 destroyAnswerWindow()
-                val cachedCallback = this@FloatWindowManager.onRectSelected
-                if (cachedCallback != null && appContext != null) {
-                    showSelectOverlay(appContext!!, cachedCallback)
+                // 如果在连续搜题模式，退出连续模式
+                if (currentState == FloatWindowState.CONTINUOUS_SEARCHING) {
+                    stopContinuousSearch()
+                    currentState = FloatWindowState.SELECTING
+                } else {
+                    val cachedCallback = this@FloatWindowManager.onRectSelected
+                    if (cachedCallback != null && appContext != null) {
+                        showSelectOverlay(appContext!!, cachedCallback)
+                    }
                 }
             }
 
             // 点击关闭 → 销毁一切
             onDismiss = {
+                // 如果在连续搜题模式，停止定时器
+                if (currentState == FloatWindowState.CONTINUOUS_SEARCHING) {
+                    stopContinuousSearch()
+                }
                 destroyAll()
                 this@FloatWindowManager.onAnswerDismissed?.invoke()
             }
 
-            // 附加到窗口
             attachToWindow()
         }
-
-        currentState = FloatWindowState.ANSWERING
     }
 
     // ==================== 录屏模式入口 ====================
@@ -232,19 +311,13 @@ object FloatWindowManager {
     /**
      * 从无障碍模式切换到录屏模式，并显示选题框。
      *
-     * 此方法会先检查录屏服务是否已在运行：
-     * - 已在运行 → 直接显示选题框，选区回调路由到录屏服务
-     * - 未运行 → 需要通过 [switchToScreenCapture] 先启动录屏服务
-     *
      * @param context 上下文
      */
     fun switchToScreenCaptureMode(context: Context) {
         if (ScreenCaptureService.isRunning()) {
-            // 录屏服务已在运行 → 直接切换模式
             currentSearchMode = SearchMode.SCREEN_CAPTURE
             showSelectOverlayForScreenCapture(context)
         } else {
-            // 录屏服务未运行 → 提示用户先授权
             showAnswerWindow(
                 context,
                 answer = "切换到录屏模式",
@@ -254,7 +327,6 @@ object FloatWindowManager {
                         "2. 授权系统录屏权限\n" +
                         "3. 重新选题开始搜题",
                 onDismissed = {
-                    // 保持无障碍模式
                     currentSearchMode = SearchMode.ACCESSIBILITY
                 }
             )
@@ -299,9 +371,7 @@ object FloatWindowManager {
 
         val ctx = context.applicationContext
         functionPanel = FunctionPanelView(ctx).apply {
-            this.onDismiss = {
-                dismissFunctionPanel()
-            }
+            this.onDismiss = { dismissFunctionPanel() }
             this.onScreenCaptureClick = {
                 dismissFunctionPanel()
                 onScreenCaptureClick()
@@ -338,7 +408,9 @@ object FloatWindowManager {
     private fun destroySelectOverlay() {
         selectOverlay?.detachFromWindow()
         selectOverlay = null
-        if (currentState == FloatWindowState.SELECTING) {
+        if (currentState == FloatWindowState.SELECTING ||
+            currentState == FloatWindowState.CONTINUOUS_SEARCHING
+        ) {
             currentState = FloatWindowState.IDLE
         }
     }
@@ -349,7 +421,9 @@ object FloatWindowManager {
     private fun destroyAnswerWindow() {
         answerWindow?.detachFromWindow()
         answerWindow = null
-        if (currentState == FloatWindowState.ANSWERING) {
+        if (currentState == FloatWindowState.ANSWERING ||
+            currentState == FloatWindowState.CONTINUOUS_SEARCHING
+        ) {
             currentState = FloatWindowState.IDLE
         }
     }
@@ -358,10 +432,12 @@ object FloatWindowManager {
      * 销毁所有悬浮窗，清除所有回调，回到 IDLE 状态。
      */
     fun destroyAll() {
+        stopContinuousSearch()
         destroySelectOverlay()
         destroyAnswerWindow()
         onRectSelected = null
         onAnswerDismissed = null
+        onContinuousSearch = null
         currentSearchMode = SearchMode.ACCESSIBILITY
         currentState = FloatWindowState.IDLE
     }
@@ -377,6 +453,6 @@ object FloatWindowManager {
     /** 答案弹窗是否正在显示 */
     fun isAnswering(): Boolean = currentState == FloatWindowState.ANSWERING
 
-    /** 获取当前缓存的选区回调（用于无障碍服务获取后续选区） */
-    fun getCachedRectCallback(): ((Rect) -> Unit)? = onRectSelected
+    /** 是否处于连续搜题模式 */
+    fun isContinuousSearching(): Boolean = currentState == FloatWindowState.CONTINUOUS_SEARCHING
 }

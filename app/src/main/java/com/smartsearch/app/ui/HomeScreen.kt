@@ -43,6 +43,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.net.URLDecoder
+import java.net.URLEncoder
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -257,7 +259,8 @@ class HomeActivity : ComponentActivity() {
                         QuestionBankListScreen(
                             onBack = { navController.popBackStack() },
                             onStartPractice = { subject, mode ->
-                                navController.navigate("answer/$subject/$mode")
+                                val encodedSubject = URLEncoder.encode(subject, "UTF-8")
+                                navController.navigate("answer/$encodedSubject/$mode")
                             }
                         )
                     }
@@ -268,7 +271,8 @@ class HomeActivity : ComponentActivity() {
                             navArgument("mode") { type = NavType.StringType }
                         )
                     ) { backStackEntry ->
-                        val subject = backStackEntry.arguments?.getString("subject") ?: ""
+                        val rawSubject = backStackEntry.arguments?.getString("subject") ?: ""
+                        val subject = URLDecoder.decode(rawSubject, "UTF-8")
                         val mode = backStackEntry.arguments?.getString("mode") ?: "SEQUENTIAL"
                         AnswerScreen(
                             subject = subject,

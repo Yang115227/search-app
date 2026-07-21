@@ -51,6 +51,19 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
     /** 用户确认选区后的回调，参数为屏幕坐标系下的选区矩形 */
     var onRectConfirmed: ((Rect) -> Unit)? = null
 
+    /** 用户点击"开始搜题"按钮的回调（连续搜题模式） */
+    var onStartContinuousSearch: ((Rect) -> Unit)? = null
+
+    /** 选区变化回调（拖拽/缩放时触发，用于连续搜题模式更新识别范围） */
+    var onSelectionChanged: ((Rect) -> Unit)? = null
+
+    /** 是否处于连续搜题模式 */
+    var isContinuousMode: Boolean = false
+        set(value) {
+            field = value
+            invalidate()
+        }
+
     // ==================== 窗口管理 ====================
 
     private var windowManager: WindowManager =
@@ -110,6 +123,16 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
 
     /** 当前选区矩形，初始化时居中，占屏幕宽高 40% */
     private var selectionRect = RectF()
+
+    /** 获取当前选区屏幕坐标（整型 Rect） */
+    fun getSelectionRect(): android.graphics.Rect {
+        return android.graphics.Rect(
+            selectionRect.left.toInt(),
+            selectionRect.top.toInt(),
+            selectionRect.right.toInt(),
+            selectionRect.bottom.toInt()
+        )
+    }
 
     // ==================== 画笔 ====================
 
@@ -174,6 +197,14 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
     private val confirmTextPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
         textSize = 15f.dp(15f)
+        isFakeBoldText = true
+        textAlign = Paint.Align.CENTER
+    }
+
+    /** 连续搜题模式指示文字画笔 */
+    private val continuousLabelPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#FF9800")
+        textSize = 13f.dp(13f)
         isFakeBoldText = true
         textAlign = Paint.Align.CENTER
     }
@@ -327,8 +358,10 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
     /**
      * 绘制底部居中确认选区按钮。
      *
-     * 绿色圆角矩形 + 白色"确认选区"文字。
+     * 绿色圆角矩形 + 白色文字。
      * 按钮位于选区底部下方 [confirmButtonMargin] 像素处，水平居中。
+     * - 普通模式：显示"开始搜题"
+     * - 连续搜题模式：显示"搜题中..."
      */
     private fun drawConfirmButton(canvas: Canvas) {
         val r = selectionRect
@@ -345,7 +378,14 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
         // 白色文字
         val textY = btnTop + confirmButtonHeight / 2f -
                 (confirmTextPaint.fontMetrics.ascent + confirmTextPaint.fontMetrics.descent) / 2f
-        canvas.drawText("确认选区", btnCenterX, textY, confirmTextPaint)
+        val buttonText = if (isContinuousMode) "搜题中..." else "开始搜题"
+        canvas.drawText(buttonText, btnCenterX, textY, confirmTextPaint)
+
+        // 连续搜题模式：在按钮上方显示"连续搜题"标签
+        if (isContinuousMode) {
+            val labelY = btnTop - 8f.dp(8f)
+            canvas.drawText("连续搜题中...", btnCenterX, labelY, continuousLabelPaint)
+        }
     }
 
     // ==================== 触摸事件处理 ====================
@@ -380,16 +420,15 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
             return
         }
 
-        // 优先级 2：点击确认选区按钮
+        // 优先级 2：点击"开始搜题"按钮 → 进入连续搜题模式
         if (hitConfirmButton(x, y)) {
-            // 确认选区 → 回调坐标
             val rect = Rect(
                 selectionRect.left.toInt(),
                 selectionRect.top.toInt(),
                 selectionRect.right.toInt(),
                 selectionRect.bottom.toInt()
             )
-            onRectConfirmed?.invoke(rect)
+            onStartContinuousSearch?.invoke(rect)
             touchMode = TouchMode.NONE
             return
         }
@@ -474,9 +513,20 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
 
     /**
      * 手指抬起：仅重置触摸模式，不自动确认选区。
-     * 用户需点击「确认选区」按钮来提交选区。
+     * 用户需点击「开始搜题」按钮来启动搜题。
+     * 在连续搜题模式下，拖拽/缩放完成后通知选区变化。
      */
     private fun handleTouchUp(x: Float, y: Float) {
+        if (touchMode != TouchMode.NONE && isContinuousMode) {
+            // 连续搜题模式：拖拽/缩放完成后触发重新搜题
+            val rect = Rect(
+                selectionRect.left.toInt(),
+                selectionRect.top.toInt(),
+                selectionRect.right.toInt(),
+                selectionRect.bottom.toInt()
+            )
+            onSelectionChanged?.invoke(rect)
+        }
         touchMode = TouchMode.NONE
     }
 
