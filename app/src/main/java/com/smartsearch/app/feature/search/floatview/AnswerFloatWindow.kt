@@ -13,30 +13,30 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
-import com.smartsearch.app.core.utils.RectUtil
 
 /**
- * 答案展示悬浮窗 —— 绿色外边框 + 白色内容区域，Canvas 绘制。
+ * 底部答案弹窗 —— 绿色底部常驻栏，Canvas 绘制。
  *
  * # 视觉设计
- * - 绿色（#4CAF50）外边框，圆角矩形，边框宽度 3dp
- * - 白色内容区域，显示答案文本和解析文本
- * - 左上角绘制返回箭头按钮（圆形 + 左箭头），点击返回选题框
- * - 右下角 L 形缩放控制点，拖动可改变窗口大小
- * - 顶部标题栏区域绘制"答案"标题
+ * - 底部全宽绿色（#4CAF50）背景条，圆角顶部
+ * - 左侧：X 关闭按钮
+ * - 中间：答案文本（自动换行，最多 2 行）
+ * - 右侧：绿色「选区」按钮
+ * - 白色分割线分隔各区域
  *
  * # 触摸逻辑
  * | 触摸位置          | 行为                              |
  * |------------------|-----------------------------------|
- * | 返回箭头按钮      | 销毁当前弹窗，重新打开选题框         |
- * | 缩放控制点        | 拖动改变窗口大小                   |
+ * | X 关闭按钮        | 退出连续搜题模式，回到悬浮球         |
+ * | 「选区」按钮      | 重新唤起选区框，调整识别范围         |
  * | 其他区域          | 拖动整体窗口位置                   |
  *
  * # 窗口属性
  * - WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
  * - FLAG_NOT_FOCUSABLE：不拦截底层页面焦点
- * - 默认宽 300dp，高自适应（最小 150dp，最大 400dp）
- * - 默认位置：屏幕水平居中，纵向偏下 1/3 处
+ * - 默认宽度：屏幕宽度 - 16dp 边距
+ * - 默认高度：自适应（约 120dp）
+ * - 默认位置：屏幕底部居中
  *
  * # 兼容性
  * Android 10 (API 29) ~ Android 14 (API 34)，Canvas 绘制，无第三方依赖。
@@ -45,11 +45,11 @@ class AnswerFloatWindow(private val context: Context) : View(context) {
 
     // ==================== 回调 ====================
 
-    /** 点击返回箭头按钮 */
-    var onBackPressed: (() -> Unit)? = null
-
-    /** 点击关闭（外部可能通过其他方式关闭） */
+    /** 点击关闭按钮 */
     var onDismiss: (() -> Unit)? = null
+
+    /** 点击「选区」按钮，重新唤起选区框 */
+    var onSelectAreaClick: (() -> Unit)? = null
 
     // ==================== 窗口管理 ====================
 
@@ -63,161 +63,135 @@ class AnswerFloatWindow(private val context: Context) : View(context) {
     private val density = context.resources.displayMetrics.density
     private val dp: Float.(Float) -> Float = { value -> value * density }
 
-    /** 窗口默认宽度 */
-    private val windowWidth = 300f.dp(300f)
+    /** 窗口高度 */
+    private val windowHeight = 120f.dp(120f)
 
-    /** 窗口最小高度 */
-    private val minWindowHeight = 150f.dp(150f)
+    /** 底部边距（距离屏幕底部） */
+    private val bottomMargin = 24f.dp(24f)
 
-    /** 窗口最大高度 */
-    private val maxWindowHeight = 400f.dp(400f)
+    /** 水平边距 */
+    private val horizontalMargin = 8f.dp(8f)
 
-    /** 绿色外边框宽度 */
-    private val borderWidth = 3f.dp(3f)
-
-    /** 圆角半径 */
+    /** 圆角半径（顶部两个角） */
     private val cornerRadius = 12f.dp(12f)
 
-    /** 标题栏高度 */
-    private val titleBarHeight = 40f.dp(40f)
-
-    /** 内边距 */
-    private val padding = 16f.dp(16f)
-
-    /** 返回箭头按钮半径 */
-    private val backButtonRadius = 14f.dp(14f)
-
-    /** 返回箭头线条长度 */
-    private val backArrowLen = 6f.dp(6f)
-
-    /** 返回箭头描边宽度 */
-    private val backArrowStroke = 2.5f.dp(2.5f)
+    /** 左右内边距 */
+    private val padding = 12f.dp(12f)
 
     /** 关闭按钮半径 */
-    private val closeButtonRadius = 14f.dp(14f)
+    private val closeButtonRadius = 16f.dp(16f)
 
     /** 关闭按钮 X 线条长度 */
-    private val closeCrossLen = 6f.dp(6f)
+    private val closeCrossLen = 7f.dp(7f)
 
     /** 关闭按钮描边宽度 */
     private val closeButtonStroke = 2.5f.dp(2.5f)
 
-    /** 缩放控制点边长 */
-    private val resizeHandleSize = 36f.dp(36f)
+    /** 「选区」按钮宽度 */
+    private val selectAreaBtnWidth = 72f.dp(72f)
 
-    /** 缩放控制点 L 形线条长度 */
-    private val resizeHandleLineLen = 18f.dp(18f)
+    /** 「选区」按钮高度 */
+    private val selectAreaBtnHeight = 36f.dp(36f)
 
-    /** 缩放控制点描边宽度 */
-    private val resizeHandleStroke = 3f.dp(3f)
+    /** 「选区」按钮圆角 */
+    private val selectAreaBtnRadius = 8f.dp(8f)
 
     /** 触摸热区扩大 */
     private val touchSlop = 12f.dp(12f)
 
-    /** 窗口最小可缩放尺寸 */
-    private val minResizeWidth = 200f.dp(200f)
-    private val minResizeHeight = 100f.dp(100f)
+    /** 拖动判定最小距离 */
+    private val dragThreshold = 10f.dp(10f)
 
     // ==================== 颜色常量 ====================
 
-    /** 绿色外边框 */
-    private val borderColor = Color.parseColor("#4CAF50")
+    /** 背景色（绿色） */
+    private val bgColor = Color.parseColor("#4CAF50")
 
-    /** 白色内容背景 */
-    private val backgroundColor = Color.WHITE
+    /** 按钮背景色（白色半透明） */
+    private val btnBgColor = Color.argb(30, 255, 255, 255)
 
-    /** 标题栏文字颜色 */
-    private val titleTextColor = Color.parseColor("#333333")
+    /** 分割线颜色 */
+    private val dividerColor = Color.argb(60, 255, 255, 255)
 
-    /** 答案文字颜色 */
-    private val answerTextColor = Color.parseColor("#1B5E20")
+    /** 关闭按钮颜色 */
+    private val closeBtnColor = Color.argb(180, 255, 255, 255)
 
-    /** 解析文字颜色 */
-    private val explanationTextColor = Color.parseColor("#666666")
+    /** 文字颜色（白色） */
+    private val textColor = Color.WHITE
+
+    /** 选区按钮文字颜色 */
+    private val selectBtnTextColor = Color.parseColor("#4CAF50")
+
+    /** 选区按钮背景色 */
+    private val selectBtnBgColor = Color.WHITE
 
     // ==================== 内容数据 ====================
 
     /** 答案文本 */
     private var answerText: String = ""
 
-    /** 解析文本 */
+    /** 解析文本（备选，当答案为空时显示） */
     private var explanationText: String = ""
 
     // ==================== 当前窗口尺寸 ====================
 
-    private var currentWidth = windowWidth
-    private var currentHeight = minWindowHeight
+    private var currentWidth = 0
+    private var currentHeight = windowHeight.toInt()
 
     // ==================== 画笔 ====================
 
-    /** 绿色外边框画笔 */
-    private val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = borderColor
-        style = Paint.Style.STROKE
-        strokeWidth = borderWidth
-    }
-
-    /** 白色内容背景画笔 */
+    /** 绿色背景画笔 */
     private val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = backgroundColor
+        color = bgColor
         style = Paint.Style.FILL
     }
 
-    /** 返回箭头按钮背景圆画笔 */
-    private val backBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.argb(30, 0, 0, 0) // 极浅灰
-        style = Paint.Style.FILL
+    /** 分割线画笔 */
+    private val dividerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = dividerColor
+        strokeWidth = 1.5f.dp(1.5f)
     }
 
-    /** 返回箭头线条画笔 */
-    private val backArrowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#555555")
-        style = Paint.Style.STROKE
-        strokeWidth = backArrowStroke
-        strokeCap = Paint.Cap.ROUND
-        strokeJoin = Paint.Join.ROUND
-    }
-
-    /** 关闭按钮背景圆画笔 */
-    private val closeBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.argb(30, 0, 0, 0) // 极浅灰
-        style = Paint.Style.FILL
-    }
-
-    /** 关闭按钮 X 线条画笔 */
-    private val closeLinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#555555")
+    /** 关闭按钮画笔 */
+    private val closeBtnPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = closeBtnColor
         style = Paint.Style.STROKE
         strokeWidth = closeButtonStroke
         strokeCap = Paint.Cap.ROUND
     }
 
-    /** 标题文字画笔 */
-    private val titleTextPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = titleTextColor
-        textSize = 16f.dp(16f)
-        isFakeBoldText = true
+    /** 关闭按钮背景圆画笔 */
+    private val closeBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = btnBgColor
+        style = Paint.Style.FILL
     }
 
     /** 答案文字画笔 */
     private val answerTextPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = answerTextColor
-        textSize = 18f.dp(18f)
+        color = textColor
+        textSize = 15f.dp(15f)
         isFakeBoldText = true
     }
 
-    /** 解析文字画笔 */
+    /** 解析文字画笔（较小） */
     private val explanationTextPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = explanationTextColor
-        textSize = 14f.dp(14f)
+        color = textColor
+        textSize = 13f.dp(13f)
+        alpha = 200
     }
 
-    /** 缩放控制点画笔 */
-    private val resizePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#CCCCCC")
-        style = Paint.Style.STROKE
-        strokeWidth = resizeHandleStroke
-        strokeCap = Paint.Cap.ROUND
+    /** 选区按钮文字画笔 */
+    private val selectBtnTextPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = selectBtnTextColor
+        textSize = 14f.dp(14f)
+        isFakeBoldText = true
+        textAlign = Paint.Align.CENTER
+    }
+
+    /** 选区按钮背景画笔 */
+    private val selectBtnBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = selectBtnBgColor
+        style = Paint.Style.FILL
     }
 
     // ==================== 触摸状态 ====================
@@ -227,93 +201,68 @@ class AnswerFloatWindow(private val context: Context) : View(context) {
     private var touchStartY = 0f
     private var windowStartX = 0
     private var windowStartY = 0
-    private var resizeStartWidth = 0f
-    private var resizeStartHeight = 0f
+    private var isDragging = false
 
     private enum class TouchMode {
-        NONE, DRAG, RESIZE
+        NONE, DRAG
     }
 
     // ==================== 静态布局缓存 ====================
 
     private var answerLayout: StaticLayout? = null
-    private var explanationLayout: StaticLayout? = null
 
     // ==================== 公开方法 ====================
 
     /**
-     * 设置答案内容并重新测量布局。
+     * 设置答案内容并重新绘制。
      * @param answer 答案文本
      * @param explanation 解析文本（可选）
      */
     fun setContent(answer: String, explanation: String = "") {
         this.answerText = answer
         this.explanationText = explanation
-        buildTextLayouts()
-        calculateWindowHeight()
-        requestLayout()
+        buildTextLayout()
         invalidate()
     }
 
     /**
      * 构建 StaticLayout 用于文字换行绘制。
      */
-    private fun buildTextLayouts() {
-        val textAreaWidth = (currentWidth - padding * 2 - borderWidth * 2).toInt()
+    private fun buildTextLayout() {
+        // 文本区域宽度 = 窗口宽度 - 左侧关闭按钮区 - 右侧选区按钮区 - 内边距
+        val closeArea = padding + closeButtonRadius * 2 + padding
+        val selectArea = padding + selectAreaBtnWidth + padding
+        val textAreaWidth = (currentWidth - closeArea - selectArea - padding * 2).coerceAtLeast(50)
 
-        if (answerText.isNotEmpty() && textAreaWidth > 0) {
-            answerLayout = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                StaticLayout.Builder.obtain(answerText, 0, answerText.length, answerTextPaint, textAreaWidth)
+        val displayText = if (answerText.isNotEmpty()) answerText else explanationText
+
+        if (displayText.isNotEmpty() && textAreaWidth > 0) {
+            val paint = if (answerText.isNotEmpty()) answerTextPaint else explanationTextPaint
+            // 最大 2 行高度限制
+            val maxLines = 2
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                answerLayout = StaticLayout.Builder.obtain(
+                    displayText, 0, displayText.length, paint, textAreaWidth
+                )
                     .setAlignment(Layout.Alignment.ALIGN_NORMAL)
-                    .setLineSpacing(4f.dp(4f), 1f)
+                    .setMaxLines(maxLines)
+                    .setEllipsize(android.text.TextUtils.TruncateAt.END)
+                    .setLineSpacing(2f.dp(2f), 1f)
                     .build()
             } else {
                 @Suppress("DEPRECATION")
-                StaticLayout(answerText, answerTextPaint, textAreaWidth, Layout.Alignment.ALIGN_NORMAL, 1f, 4f.dp(4f), false)
+                answerLayout = StaticLayout(
+                    displayText, paint, textAreaWidth,
+                    Layout.Alignment.ALIGN_NORMAL, 1f, 2f.dp(2f), false
+                )
             }
         }
-
-        if (explanationText.isNotEmpty() && textAreaWidth > 0) {
-            explanationLayout = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                StaticLayout.Builder.obtain(explanationText, 0, explanationText.length, explanationTextPaint, textAreaWidth)
-                    .setAlignment(Layout.Alignment.ALIGN_NORMAL)
-                    .setLineSpacing(4f.dp(4f), 1f)
-                    .build()
-            } else {
-                @Suppress("DEPRECATION")
-                StaticLayout(explanationText, explanationTextPaint, textAreaWidth, Layout.Alignment.ALIGN_NORMAL, 1f, 4f.dp(4f), false)
-            }
-        }
-    }
-
-    /**
-     * 根据文本内容计算窗口合适高度。
-     */
-    private fun calculateWindowHeight() {
-        val answerH = answerLayout?.height?.toFloat() ?: 0f
-        val explanationH = explanationLayout?.height?.toFloat() ?: 0f
-
-        // 标题栏 + 答案标签 + 答案内容 + 间距 + 解析标签 + 解析内容 + 底部 padding
-        var contentH = titleBarHeight + padding // 标题栏
-        if (answerText.isNotEmpty()) {
-            contentH += 24f.dp(24f) // "答案" 标签行高
-            contentH += answerH
-        }
-        if (explanationText.isNotEmpty()) {
-            contentH += padding * 0.5f // 间距
-            contentH += 24f.dp(24f) // "解析" 标签行高
-            contentH += explanationH
-        }
-        contentH += padding // 底部 padding
-        contentH += borderWidth * 2 // 边框
-
-        currentHeight = contentH.coerceIn(minWindowHeight, maxWindowHeight)
     }
 
     // ==================== 测量 ====================
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-        setMeasuredDimension(currentWidth.toInt(), currentHeight.toInt())
+        setMeasuredDimension(currentWidth, currentHeight)
     }
 
     // ==================== Canvas 绘制 ====================
@@ -323,143 +272,90 @@ class AnswerFloatWindow(private val context: Context) : View(context) {
 
         val w = width.toFloat()
         val h = height.toFloat()
-        val halfBorder = borderWidth / 2f
 
-        // 内容区域矩形（边框内区域）
-        val contentRect = RectF(halfBorder, halfBorder, w - halfBorder, h - halfBorder)
+        // ── 第 1 层：绿色圆角矩形背景（顶部圆角） ──
+        val bgRect = RectF(0f, 0f, w, h)
+        canvas.drawRoundRect(bgRect, cornerRadius, cornerRadius, bgPaint)
 
-        // ── 第 1 层：白色内容背景（圆角矩形） ──
-        canvas.drawRoundRect(contentRect, cornerRadius, cornerRadius, bgPaint)
+        // ── 第 2 层：左侧关闭按钮 ──
+        drawCloseButton(canvas, h)
 
-        // ── 第 2 层：绿色外边框（圆角矩形） ──
-        canvas.drawRoundRect(contentRect, cornerRadius, cornerRadius, borderPaint)
+        // ── 第 2b 层：关闭按钮右侧分割线 ──
+        val closeRight = padding + closeButtonRadius * 2 + padding
+        canvas.drawLine(closeRight, padding, closeRight, h - padding, dividerPaint)
 
-        // ── 第 3 层：标题栏分割线 ──
-        val dividerY = titleBarHeight + halfBorder
-        canvas.drawLine(
-            padding + halfBorder, dividerY,
-            w - padding - halfBorder, dividerY,
-            Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = Color.parseColor("#E0E0E0")
-                strokeWidth = 1f
-            })
+        // ── 第 3 层：中间答案文本 ──
+        drawAnswerText(canvas, h, closeRight)
 
-        // ── 第 4 层：返回箭头按钮 ──
-        drawBackButton(canvas, halfBorder)
-
-        // ── 第 4b 层：右上角 X 关闭按钮 ──
-        drawCloseButton(canvas, halfBorder, w)
-
-        // ── 第 5 层：标题文字 ──
-        val titleText = "答案"
-        val titleX = (w - titleTextPaint.measureText(titleText)) / 2f
-        val titleY = halfBorder + (titleBarHeight - titleTextPaint.fontMetrics.let {
-            it.descent - it.ascent
-        }) / 2f - titleTextPaint.fontMetrics.ascent
-        canvas.drawText(titleText, titleX, titleY, titleTextPaint)
-
-        // ── 第 6 层：答案内容文字 ──
-        drawContentText(canvas, halfBorder)
-
-        // ── 第 7 层：缩放控制点 ──
-        drawResizeHandle(canvas, w, h)
+        // ── 第 4 层：右侧「选区」按钮 ──
+        drawSelectAreaButton(canvas, w, h)
     }
 
     /**
-     * 绘制左上角返回箭头按钮。
+     * 绘制左侧关闭按钮。
      */
-    private fun drawBackButton(canvas: Canvas, halfBorder: Float) {
-        val cx = halfBorder + padding + backButtonRadius
-        val cy = halfBorder + titleBarHeight / 2f
-
-        // 背景圆
-        canvas.drawCircle(cx, cy, backButtonRadius, backBgPaint)
-
-        // 左箭头 "<"
-        val len = backArrowLen
-        // 水平线
-        canvas.drawLine(cx - len, cy, cx + len, cy, backArrowPaint)
-        // 指向左上方的斜线（箭头尖端）
-        canvas.drawLine(cx - len, cy, cx - len + len * 0.6f, cy - len * 0.6f, backArrowPaint)
-        // 指向左下方的斜线（箭头尖端）
-        canvas.drawLine(cx - len, cy, cx - len + len * 0.6f, cy + len * 0.6f, backArrowPaint)
-    }
-
-    /**
-     * 绘制右上角 X 关闭按钮。
-     */
-    private fun drawCloseButton(canvas: Canvas, halfBorder: Float, windowWidth: Float) {
-        val cx = windowWidth - halfBorder - padding - closeButtonRadius
-        val cy = halfBorder + titleBarHeight / 2f
+    private fun drawCloseButton(canvas: Canvas, h: Float) {
+        val cx = padding + closeButtonRadius
+        val cy = h / 2f
 
         // 背景圆
         canvas.drawCircle(cx, cy, closeButtonRadius, closeBgPaint)
 
         // X 形状
         val half = closeCrossLen
-        canvas.drawLine(cx - half, cy - half, cx + half, cy + half, closeLinePaint)
-        canvas.drawLine(cx + half, cy - half, cx - half, cy + half, closeLinePaint)
+        canvas.drawLine(cx - half, cy - half, cx + half, cy + half, closeBtnPaint)
+        canvas.drawLine(cx + half, cy - half, cx - half, cy + half, closeBtnPaint)
     }
 
     /**
-     * 绘制答案/解析内容文字。
+     * 绘制中间答案文本。
      */
-    private fun drawContentText(canvas: Canvas, halfBorder: Float) {
-        val textX = halfBorder + padding
-        var textY = halfBorder + titleBarHeight + padding + 4f.dp(4f)
+    private fun drawAnswerText(canvas: Canvas, h: Float, leftEdge: Float) {
+        val textLeft = leftEdge + padding
+        val textCenterY = h / 2f
 
-        // 答案标签
-        if (answerText.isNotEmpty()) {
-            val labelPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = answerTextColor
+        answerLayout?.let { layout ->
+            val textHeight = layout.height
+            val textTop = textCenterY - textHeight / 2f
+            canvas.save()
+            canvas.translate(textLeft, textTop)
+            layout.draw(canvas)
+            canvas.restore()
+        } ?: run {
+            // 无内容时显示提示文字
+            val hintPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = textColor
                 textSize = 13f.dp(13f)
-                isFakeBoldText = true
+                alpha = 150
             }
-            canvas.drawText("答案", textX, textY, labelPaint)
-            textY += 24f.dp(24f)
-
-            // 答案内容
-            answerLayout?.let { layout ->
-                canvas.save()
-                canvas.translate(textX, textY)
-                layout.draw(canvas)
-                canvas.restore()
-                textY += layout.height + 4f.dp(4f)
-            }
-        }
-
-        // 解析标签
-        if (explanationText.isNotEmpty()) {
-            textY += 4f.dp(4f)
-            val labelPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = explanationTextColor
-                textSize = 13f.dp(13f)
-                isFakeBoldText = true
-            }
-            canvas.drawText("解析", textX, textY, labelPaint)
-            textY += 24f.dp(24f)
-
-            // 解析内容
-            explanationLayout?.let { layout ->
-                canvas.save()
-                canvas.translate(textX, textY)
-                layout.draw(canvas)
-                canvas.restore()
-            }
+            val hintText = "等待识别结果..."
+            val textY = textCenterY - (hintPaint.fontMetrics.ascent + hintPaint.fontMetrics.descent) / 2f
+            canvas.drawText(hintText, textLeft, textY, hintPaint)
         }
     }
 
     /**
-     * 绘制右下角 L 形缩放控制点。
+     * 绘制右侧「选区」按钮。
      */
-    private fun drawResizeHandle(canvas: Canvas, w: Float, h: Float) {
-        val x = w - borderWidth - 4f.dp(4f)
-        val y = h - borderWidth - 4f.dp(4f)
-        val len = resizeHandleLineLen
+    private fun drawSelectAreaButton(canvas: Canvas, w: Float, h: Float) {
+        val btnRight = w - padding
+        val btnLeft = btnRight - selectAreaBtnWidth
+        val btnCenterY = h / 2f
+        val btnTop = btnCenterY - selectAreaBtnHeight / 2f
+        val btnBottom = btnCenterY + selectAreaBtnHeight / 2f
 
-        // L 形拐角
-        canvas.drawLine(x - len, y, x, y, resizePaint)
-        canvas.drawLine(x, y - len, x, y, resizePaint)
+        // 白色圆角矩形背景
+        val btnRect = RectF(btnLeft, btnTop, btnRight, btnBottom)
+        canvas.drawRoundRect(btnRect, selectAreaBtnRadius, selectAreaBtnRadius, selectBtnBgPaint)
+
+        // 「选区」文字
+        val text = "选区"
+        val textY = btnCenterY - (selectBtnTextPaint.fontMetrics.ascent + selectBtnTextPaint.fontMetrics.descent) / 2f
+        val textX = (btnLeft + btnRight) / 2f
+        canvas.drawText(text, textX, textY, selectBtnTextPaint)
+
+        // 按钮左侧分割线
+        canvas.drawLine(btnLeft - padding, padding, btnLeft - padding, h - padding, dividerPaint)
     }
 
     // ==================== 触摸事件处理 ====================
@@ -470,9 +366,9 @@ class AnswerFloatWindow(private val context: Context) : View(context) {
 
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> handleTouchDown(x, y)
-            MotionEvent.ACTION_MOVE -> handleTouchMove(x, y, event.rawX, event.rawY)
+            MotionEvent.ACTION_MOVE -> handleTouchMove(event.rawX, event.rawY)
             MotionEvent.ACTION_UP,
-            MotionEvent.ACTION_CANCEL -> handleTouchUp(x, y, event.rawX, event.rawY)
+            MotionEvent.ACTION_CANCEL -> handleTouchUp(x, y)
         }
         return true
     }
@@ -483,52 +379,39 @@ class AnswerFloatWindow(private val context: Context) : View(context) {
     private fun handleTouchDown(x: Float, y: Float) {
         touchStartX = x
         touchStartY = y
+        isDragging = false
 
         val params = windowParams ?: return
         windowStartX = params.x
         windowStartY = params.y
 
-        // 优先级 1：点击返回箭头按钮（左上角）
-        val backCx = borderWidth / 2f + padding + backButtonRadius
-        val backCy = borderWidth / 2f + titleBarHeight / 2f
-        val backButtonRect = RectF(
-            backCx - backButtonRadius - touchSlop,
-            backCy - backButtonRadius - touchSlop,
-            backCx + backButtonRadius + touchSlop,
-            backCy + backButtonRadius + touchSlop
-        )
-        if (backButtonRect.contains(x, y)) {
-            onBackPressed?.invoke()
-            touchMode = TouchMode.NONE
-            return
-        }
-
-        // 优先级 1b：点击 X 关闭按钮（右上角）
-        val closeCx = width - borderWidth / 2f - padding - closeButtonRadius
-        val closeCy = borderWidth / 2f + titleBarHeight / 2f
-        val closeButtonRect = RectF(
+        // 优先级 1：点击 X 关闭按钮（左侧）
+        val closeCx = padding + closeButtonRadius
+        val closeCy = height / 2f
+        val closeBtnRect = RectF(
             closeCx - closeButtonRadius - touchSlop,
             closeCy - closeButtonRadius - touchSlop,
             closeCx + closeButtonRadius + touchSlop,
             closeCy + closeButtonRadius + touchSlop
         )
-        if (closeButtonRect.contains(x, y)) {
+        if (closeBtnRect.contains(x, y)) {
             onDismiss?.invoke()
             touchMode = TouchMode.NONE
             return
         }
 
-        // 优先级 2：点击缩放控制点
-        val handleRect = RectF(
-            width - resizeHandleSize - touchSlop,
-            height - resizeHandleSize - touchSlop,
-            width.toFloat() + touchSlop,
-            height.toFloat() + touchSlop
+        // 优先级 2：点击「选区」按钮（右侧）
+        val btnRight = width - padding
+        val btnLeft = btnRight - selectAreaBtnWidth
+        val btnCenterY = height / 2f
+        val btnTop = btnCenterY - selectAreaBtnHeight / 2f - touchSlop
+        val btnBottom = btnCenterY + selectAreaBtnHeight / 2f + touchSlop
+        val selectBtnRect = RectF(
+            btnLeft - touchSlop, btnTop, btnRight + touchSlop, btnBottom
         )
-        if (handleRect.contains(x, y)) {
-            touchMode = TouchMode.RESIZE
-            resizeStartWidth = currentWidth
-            resizeStartHeight = currentHeight
+        if (selectBtnRect.contains(x, y)) {
+            onSelectAreaClick?.invoke()
+            touchMode = TouchMode.NONE
             return
         }
 
@@ -539,71 +422,47 @@ class AnswerFloatWindow(private val context: Context) : View(context) {
     /**
      * 手指移动。
      */
-    private fun handleTouchMove(x: Float, y: Float, rawX: Float, rawY: Float) {
-        when (touchMode) {
-            TouchMode.DRAG -> {
-                val params = windowParams ?: return
-                val dx = (x - touchStartX).toInt()
-                val dy = (y - touchStartY).toInt()
-                params.x = windowStartX + dx
-                params.y = windowStartY + dy
+    private fun handleTouchMove(rawX: Float, rawY: Float) {
+        if (touchMode != TouchMode.DRAG) return
 
-                try {
-                    windowManager.updateViewLayout(this, params)
-                } catch (e: IllegalArgumentException) {
-                    // 视图已被移除
-                }
+        val dx = rawX - touchStartX
+        val dy = rawY - touchStartY
+
+        // 拖动判定
+        if (kotlin.math.abs(dx) > dragThreshold || kotlin.math.abs(dy) > dragThreshold) {
+            isDragging = true
+        }
+
+        if (isDragging) {
+            val params = windowParams ?: return
+            params.x = (windowStartX + dx).toInt()
+            params.y = (windowStartY + dy).toInt()
+
+            // 约束在屏幕范围内
+            val metrics = context.resources.displayMetrics
+            params.x = params.x.coerceIn(0, metrics.widthPixels - currentWidth)
+            params.y = params.y.coerceIn(0, metrics.heightPixels - currentHeight)
+
+            try {
+                windowManager.updateViewLayout(this, params)
+            } catch (e: IllegalArgumentException) {
+                // 视图已被移除
             }
-
-            TouchMode.RESIZE -> {
-                val dx = x - touchStartX
-                val dy = y - touchStartY
-
-                var newW = (resizeStartWidth + dx).coerceAtLeast(minResizeWidth)
-                var newH = (resizeStartHeight + dy).coerceAtLeast(minResizeHeight)
-
-                // 屏幕边界限制
-                val metrics = context.resources.displayMetrics
-                val screenW = metrics.widthPixels.toFloat()
-                val screenH = metrics.heightPixels.toFloat()
-
-                val params = windowParams ?: return
-                if (params.x + newW > screenW) newW = screenW - params.x
-                if (params.y + newH > screenH) newH = screenH - params.y
-
-                currentWidth = newW
-                currentHeight = newH
-
-                // 重新构建文本布局
-                buildTextLayouts()
-                requestLayout()
-                invalidate()
-
-                // 更新窗口尺寸
-                params.width = newW.toInt()
-                params.height = newH.toInt()
-                try {
-                    windowManager.updateViewLayout(this, params)
-                } catch (e: IllegalArgumentException) {
-                    // 视图已被移除
-                }
-            }
-
-            TouchMode.NONE -> { /* 忽略 */ }
         }
     }
 
     /**
      * 手指抬起。
      */
-    private fun handleTouchUp(x: Float, y: Float, rawX: Float, rawY: Float) {
+    private fun handleTouchUp(x: Float, y: Float) {
         touchMode = TouchMode.NONE
+        isDragging = false
     }
 
     // ==================== 窗口附加/移除 ====================
 
     /**
-     * 通过 WindowManager 将答案弹窗附加到屏幕上。
+     * 通过 WindowManager 将底部答案弹窗附加到屏幕上。
      */
     fun attachToWindow() {
         if (isAttached) return
@@ -612,9 +471,11 @@ class AnswerFloatWindow(private val context: Context) : View(context) {
         val screenW = metrics.widthPixels
         val screenH = metrics.heightPixels
 
-        // 默认位置：水平居中，纵向偏下
-        val defaultX = ((screenW - currentWidth) / 2).toInt()
-        val defaultY = (screenH * 0.45f).toInt()
+        currentWidth = (screenW - (horizontalMargin * 2).toInt())
+
+        // 默认位置：屏幕底部居中
+        val defaultX = horizontalMargin.toInt()
+        val defaultY = screenH - currentHeight - bottomMargin.toInt()
 
         val params = WindowManager.LayoutParams().apply {
             type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -627,8 +488,8 @@ class AnswerFloatWindow(private val context: Context) : View(context) {
             flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                     WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
 
-            width = currentWidth.toInt()
-            height = currentHeight.toInt()
+            width = currentWidth
+            height = currentHeight
             gravity = Gravity.TOP or Gravity.START
             x = defaultX
             y = defaultY
@@ -637,6 +498,9 @@ class AnswerFloatWindow(private val context: Context) : View(context) {
         }
 
         windowParams = params
+
+        // 构建文本布局（需要 currentWidth 已确定）
+        buildTextLayout()
 
         try {
             windowManager.addView(this, params)
@@ -647,7 +511,7 @@ class AnswerFloatWindow(private val context: Context) : View(context) {
     }
 
     /**
-     * 从 WindowManager 移除答案弹窗。
+     * 从 WindowManager 移除底部答案弹窗。
      */
     fun detachFromWindow() {
         if (!isAttached) return

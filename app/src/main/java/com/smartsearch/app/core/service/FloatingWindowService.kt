@@ -519,7 +519,14 @@ class FloatingWindowService : Service() {
     // ==================== 搜题触发入口 ====================
 
     /**
-     * 触发无障碍搜题流程。
+     * 触发无障碍搜题流程（进入连续搜题模式）。
+     *
+     * 流程：
+     * 1. 检查悬浮窗权限
+     * 2. 显示选题框（可拖拽/右下角缩放）
+     * 3. 用户调整好区域 → 点击「开始搜题」
+     * 4. 选区框自动隐藏 → 进入连续搜题模式（3 秒轮询）
+     * 5. 底部答案弹窗常驻，实时展示识别结果
      */
     private fun triggerAccessibilitySearch() {
         // 检查悬浮窗权限
@@ -528,21 +535,23 @@ class FloatingWindowService : Service() {
             return
         }
 
-        // 显示选题框，注册选区回调
+        // 检查无障碍服务是否运行
+        val service = AccessibilitySearchServiceHolder.instance
+        if (service == null) {
+            Log.w(TAG, "无障碍服务未运行，无法进行搜题")
+            FloatWindowManager.destroyAll()
+            FloatWindowManager.showAnswerWindow(
+                this,
+                answer = "无障碍服务未开启",
+                explanation = "请在「设置 → 无障碍 → 智能搜题」中开启无障碍服务，\n" +
+                        "或点击下方按钮切换到录屏模式。"
+            )
+            return
+        }
+
+        // 显示选题框，注册选区回调 → 进入连续搜题模式
         FloatWindowManager.showSelectOverlay(this) { rect ->
-            val service = AccessibilitySearchServiceHolder.instance
-            if (service != null) {
-                service.setSelectionRect(rect)
-            } else {
-                Log.w(TAG, "无障碍服务未运行，无法进行搜题")
-                FloatWindowManager.destroyAll()
-                FloatWindowManager.showAnswerWindow(
-                    this,
-                    answer = "无障碍服务未开启",
-                    explanation = "请在「设置 → 无障碍 → 智能搜题」中开启无障碍服务，\n" +
-                            "或点击下方按钮切换到录屏模式。"
-                )
-            }
+            service.setSelectionRect(rect)
         }
     }
 

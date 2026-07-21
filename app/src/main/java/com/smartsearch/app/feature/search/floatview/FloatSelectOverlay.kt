@@ -64,6 +64,23 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
             invalidate()
         }
 
+    /**
+     * 调整模式标记。
+     * 在连续搜题模式下，点击「选区」按钮重新唤起选区框时设为 true。
+     * 调整模式下，手指抬起后自动隐藏选区框并触发 onSelectionChanged。
+     */
+    var isAdjustmentMode: Boolean = false
+        set(value) {
+            field = value
+            invalidate()
+        }
+
+    /**
+     * 调整模式回调：选区调整完成（手指抬起），自动隐藏。
+     * 参数为调整后的选区矩形。
+     */
+    var onAdjustmentComplete: ((Rect) -> Unit)? = null
+
     // ==================== 窗口管理 ====================
 
     private var windowManager: WindowManager =
@@ -132,6 +149,20 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
             selectionRect.right.toInt(),
             selectionRect.bottom.toInt()
         )
+    }
+
+    /**
+     * 恢复之前保存的选区位置。
+     * 用于连续搜题模式下点击「选区」按钮重新唤起选区框时恢复上次选区。
+     */
+    fun setSelectionRect(rect: android.graphics.Rect) {
+        selectionRect.set(
+            rect.left.toFloat(),
+            rect.top.toFloat(),
+            rect.right.toFloat(),
+            rect.bottom.toFloat()
+        )
+        invalidate()
     }
 
     // ==================== 画笔 ====================
@@ -515,17 +546,24 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
      * 手指抬起：仅重置触摸模式，不自动确认选区。
      * 用户需点击「开始搜题」按钮来启动搜题。
      * 在连续搜题模式下，拖拽/缩放完成后通知选区变化。
+     * 在调整模式下，自动隐藏选区框并触发调整完成回调。
      */
     private fun handleTouchUp(x: Float, y: Float) {
-        if (touchMode != TouchMode.NONE && isContinuousMode) {
-            // 连续搜题模式：拖拽/缩放完成后触发重新搜题
+        if (touchMode != TouchMode.NONE) {
             val rect = Rect(
                 selectionRect.left.toInt(),
                 selectionRect.top.toInt(),
                 selectionRect.right.toInt(),
                 selectionRect.bottom.toInt()
             )
-            onSelectionChanged?.invoke(rect)
+
+            if (isAdjustmentMode) {
+                // 调整模式：手指抬起后自动隐藏，触发调整完成回调
+                onAdjustmentComplete?.invoke(rect)
+            } else if (isContinuousMode) {
+                // 连续搜题模式：拖拽/缩放完成后触发重新搜题
+                onSelectionChanged?.invoke(rect)
+            }
         }
         touchMode = TouchMode.NONE
     }
