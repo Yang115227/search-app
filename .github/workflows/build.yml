@@ -68,8 +68,7 @@ jobs:
       - name: 配置 Android SDK
         uses: android-actions/setup-android@v3
         with:
-          api-level: ${{ env.COMPILE_SDK }}
-          build-tools: ${{ env.BUILD_TOOLS }}
+          packages: 'platforms;android-${{ env.COMPILE_SDK }} build-tools;${{ env.BUILD_TOOLS }}'
 
       - name: 缓存 Gradle 依赖
         uses: actions/cache@v4
@@ -123,8 +122,7 @@ jobs:
       - name: 配置 Android SDK
         uses: android-actions/setup-android@v3
         with:
-          api-level: ${{ env.COMPILE_SDK }}
-          build-tools: ${{ env.BUILD_TOOLS }}
+          packages: 'platforms;android-${{ env.COMPILE_SDK }} build-tools;${{ env.BUILD_TOOLS }}'
 
       - name: 缓存 Gradle 依赖
         uses: actions/cache@v4
@@ -196,8 +194,7 @@ jobs:
       - name: 配置 Android SDK
         uses: android-actions/setup-android@v3
         with:
-          api-level: ${{ env.COMPILE_SDK }}
-          build-tools: ${{ env.BUILD_TOOLS }}
+          packages: 'platforms;android-${{ env.COMPILE_SDK }} build-tools;${{ env.BUILD_TOOLS }}'
 
       - name: 缓存 Gradle 依赖
         uses: actions/cache@v4
