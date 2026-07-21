@@ -1,0 +1,840 @@
+package com.smartsearch.app.ui
+
+import android.util.Log
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.BookmarkBorder
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
+import com.smartsearch.app.data.local.QuizDatabase
+import com.smartsearch.app.data.local.entity.PracticeRecordEntity
+import com.smartsearch.app.data.local.entity.PracticeSessionEntity
+import com.smartsearch.app.data.local.entity.QuestionEntity
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+/**
+ * 答题页面 —— 核心练习答题交互。
+ *
+ * 功能：
+ * - 顶部：标题 + 重置进度按钮
+ * - 进度条：显示当前作答进度
+ * - 题目区域：题型、题干、选项（单选）、收藏按钮
+ * - 操作按钮：提交答案、上一题、下一题
+ * - 进度持久化：支持中途退出后恢复
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AnswerScreen(
+    subject: String,
+    mode: String,
+    onBack: () -> Unit,
+    onFinish: () -> Unit
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val gson = remember { Gson() }
+
+    // ── 核心状态 ──
+    var questions by remember { mutableStateOf<List<QuestionEntity>>(emptyList()) }
+    var currentIndex by remember { mutableIntStateOf(0) }
+    var answers by remember { mutableStateOf<Map<Long, Int>>(emptyMap()) } // questionId -> selectedOptionIndex
+    var bookmarks by remember { mutableStateOf<Set<Long>>(emptySet()) } // questionId set
+    var correctCount by remember { mutableIntStateOf(0) }
+    var answeredCount by remember { mutableIntStateOf(0) }
+    var submittedQuestions by remember { mutableStateOf<Set<Long>>(emptySet()) } // 已提交的 questionId
+    var sessionId by remember { mutableLongStateOf(0L) }
+    var startTime by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    var isLoading by remember { mutableStateOf(true) }
+    var showResetConfirm by remember { mutableStateOf(false) }
+
+    // ── 加载题目 ──
+    LaunchedEffect(subject, mode) {
+        val db = QuizDatabase.getInstance(context)
+        withContext(Dispatchers.IO) {
+            // 检查是否有未完成的练习会话
+            val existingSession = db.practiceSessionDao().getLatestIncompleteSession()
+            if (existingSession != null &&
+                existingSession.subject == subject &&
+                existingSession.mode == mode
+            ) {
+                // 恢复进度
+                val ids: List<Long> = gson.fromJson(
+                    existingSession.questionIds,
+                    object : TypeToken<List<Long>>() {}.type
+                )
+                val loadedQuestions = ids.mapNotNull { id -> db.questionDao().findById(id) }
+                val savedAnswers: Map<Long, Int> = gson.fromJson(
+                    existingSession.answers,
+                    object : TypeToken<Map<Long, Int>>() {}.type
+                ) ?: emptyMap()
+                val savedBookmarks: Set<Long> = gson.fromJson(
+                    existingSession.bookmarks,
+                    object : TypeToken<List<Long>>() {}.type
+                )?.toSet() ?: emptySet()
+
+                questions = loadedQuestions
+                currentIndex = existingSession.currentIndex
+                answers = savedAnswers
+                bookmarks = savedBookmarks
+                correctCount = existingSession.correctCount
+                answeredCount = existingSession.answeredCount
+                sessionId = existingSession.id
+                startTime = existingSession.startTime
+
+                // 恢复已提交状态
+                submittedQuestions = savedAnswers.keys
+            } else {
+                // 创建新会话
+                val allQuestions = if (subject.isBlank()) {
+                    db.questionDao().getAllQuestions()
+                } else {
+                    db.questionDao().findBySubject(subject)
+                }
+                val orderedQuestions = if (mode == "RANDOM") {
+                    allQuestions.shuffled()
+                } else {
+                    allQuestions.sortedBy { it.id }
+                }
+                questions = orderedQuestions
+
+                if (orderedQuestions.isNotEmpty()) {
+                    val ids = orderedQuestions.map { it.id }
+                    val newSession = PracticeSessionEntity(
+                        subject = subject,
+                        mode = mode,
+                        questionIds = gson.toJson(ids),
+                        currentIndex = 0,
+                        startTime = System.currentTimeMillis()
+                    )
+                    sessionId = db.practiceSessionDao().insert(newSession)
+                }
+            }
+        }
+        isLoading = false
+    }
+
+    // ── 保存进度辅助函数 ──
+    fun saveProgress() {
+        if (sessionId == 0L) return
+        scope.launch(Dispatchers.IO) {
+            val db = QuizDatabase.getInstance(context)
+            val session = db.practiceSessionDao().getById(sessionId) ?: return@launch
+            db.practiceSessionDao().update(
+                session.copy(
+                    currentIndex = currentIndex,
+                    answers = gson.toJson(answers),
+                    bookmarks = gson.toJson(bookmarks.toList()),
+                    correctCount = correctCount,
+                    answeredCount = answeredCount
+                )
+            )
+        }
+    }
+
+    // ── 重置确认对话框 ──
+    if (showResetConfirm) {
+        AlertDialog(
+            onDismissRequest = { showResetConfirm = false },
+            title = { Text("重置进度") },
+            text = { Text("确定要重置答题进度吗？所有答题记录将被清除。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showResetConfirm = false
+                    scope.launch(Dispatchers.IO) {
+                        val db = QuizDatabase.getInstance(context)
+                        if (sessionId != 0L) {
+                            db.practiceSessionDao().delete(
+                                db.practiceSessionDao().getById(sessionId) ?: return@launch
+                            )
+                        }
+                        // 重新加载题目
+                        withContext(Dispatchers.Main) {
+                            isLoading = true
+                            currentIndex = 0
+                            answers = emptyMap()
+                            bookmarks = emptySet()
+                            correctCount = 0
+                            answeredCount = 0
+                            submittedQuestions = emptySet()
+                            sessionId = 0L
+                            startTime = System.currentTimeMillis()
+                            // 重新创建会话
+                            val orderedQuestions = if (mode == "RANDOM") {
+                                questions.shuffled()
+                            } else {
+                                questions.sortedBy { it.id }
+                            }
+                            questions = orderedQuestions
+                            if (orderedQuestions.isNotEmpty()) {
+                                val ids = orderedQuestions.map { it.id }
+                                val newSession = PracticeSessionEntity(
+                                    subject = subject,
+                                    mode = mode,
+                                    questionIds = gson.toJson(ids),
+                                    currentIndex = 0,
+                                    startTime = System.currentTimeMillis()
+                                )
+                                scope.launch(Dispatchers.IO) {
+                                    sessionId = db.practiceSessionDao().insert(newSession)
+                                }
+                            }
+                            isLoading = false
+                        }
+                    }
+                }) {
+                    Text("确定重置", color = Color.Red)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetConfirm = false }) {
+                    Text("取消")
+                }
+            }
+        )
+    }
+
+    // ── 主界面 ──
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("答题") },
+                navigationIcon = {
+                    IconButton(onClick = {
+                        saveProgress()
+                        onBack()
+                    }) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { showResetConfirm = true }) {
+                        Icon(
+                            Icons.Default.Refresh,
+                            contentDescription = "重置进度",
+                            tint = Color.White
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color(0xFF4CAF50),
+                    titleContentColor = Color.White,
+                    navigationIconContentColor = Color.White
+                )
+            )
+        },
+        bottomBar = {
+            // 底部操作栏
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shadowElevation = 8.dp,
+                color = Color.White
+            ) {
+                AnswerBottomBar(
+                    currentIndex = currentIndex,
+                    totalCount = questions.size,
+                    isSubmitted = currentIndex < questions.size &&
+                            submittedQuestions.contains(questions[currentIndex].id),
+                    hasPrev = currentIndex > 0,
+                    hasNext = currentIndex < questions.size - 1,
+                    onPrev = {
+                        saveProgress()
+                        if (currentIndex > 0) currentIndex--
+                    },
+                    onNext = {
+                        saveProgress()
+                        if (currentIndex < questions.size - 1) currentIndex++
+                    },
+                    onSubmit = {
+                        val q = questions.getOrNull(currentIndex) ?: return@AnswerBottomBar
+                        val selectedIndex = answers[q.id]
+                        if (selectedIndex == null) return@AnswerBottomBar
+
+                        // 检查答案
+                        val options = parseOptions(q.options)
+                        val selectedAnswer = if (selectedIndex < options.size) {
+                            options[selectedIndex]
+                        } else ""
+
+                        val isCorrect = selectedAnswer.contains(q.answer, ignoreCase = true) ||
+                                q.answer.contains(selectedAnswer, ignoreCase = true)
+
+                        submittedQuestions = submittedQuestions + q.id
+                        answeredCount++
+                        if (isCorrect) correctCount++
+
+                        // 答错自动归档错题
+                        if (!isCorrect) {
+                            scope.launch(Dispatchers.IO) {
+                                QuizDatabase.getInstance(context)
+                                    .wrongQuestionDao()
+                                    .recordWrong(q.id, System.currentTimeMillis())
+                            }
+                        }
+
+                        saveProgress()
+                    }
+                )
+            }
+        }
+    ) { padding ->
+        if (isLoading) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(color = Color(0xFF4CAF50))
+            }
+        } else if (questions.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("暂无题目", fontSize = 16.sp, color = Color.Gray)
+            }
+        } else if (currentIndex >= questions.size) {
+            // 已完成所有题目
+            CompleteScreen(
+                correctCount = correctCount,
+                answeredCount = answeredCount,
+                totalCount = questions.size,
+                startTime = startTime,
+                onFinish = onFinish,
+                onRestart = {
+                    scope.launch(Dispatchers.IO) {
+                        val db = QuizDatabase.getInstance(context)
+                        if (sessionId != 0L) {
+                            db.practiceSessionDao().delete(
+                                db.practiceSessionDao().getById(sessionId) ?: return@launch
+                            )
+                        }
+                        // 保存练习记录
+                        val duration = (System.currentTimeMillis() - startTime) / 1000
+                        val accuracy = if (answeredCount > 0) correctCount.toFloat() / answeredCount else 0f
+                        db.practiceRecordDao().insert(
+                            PracticeRecordEntity(
+                                subject = subject,
+                                totalQuestions = answeredCount,
+                                correctCount = correctCount,
+                                accuracy = accuracy,
+                                durationSeconds = duration,
+                                practiceTime = System.currentTimeMillis()
+                            )
+                        )
+                    }
+                    // 重新开始
+                    isLoading = true
+                    currentIndex = 0
+                    answers = emptyMap()
+                    bookmarks = emptySet()
+                    correctCount = 0
+                    answeredCount = 0
+                    submittedQuestions = emptySet()
+                    sessionId = 0L
+                    startTime = System.currentTimeMillis()
+                    // 重新加载
+                    scope.launch(Dispatchers.IO) {
+                        val db = QuizDatabase.getInstance(context)
+                        val allQuestions = if (subject.isBlank()) {
+                            db.questionDao().getAllQuestions()
+                        } else {
+                            db.questionDao().findBySubject(subject)
+                        }
+                        val orderedQuestions = if (mode == "RANDOM") {
+                            allQuestions.shuffled()
+                        } else {
+                            allQuestions.sortedBy { it.id }
+                        }
+                        questions = orderedQuestions
+                        if (orderedQuestions.isNotEmpty()) {
+                            val ids = orderedQuestions.map { it.id }
+                            val newSession = PracticeSessionEntity(
+                                subject = subject,
+                                mode = mode,
+                                questionIds = gson.toJson(ids),
+                                currentIndex = 0,
+                                startTime = System.currentTimeMillis()
+                            )
+                            sessionId = db.practiceSessionDao().insert(newSession)
+                        }
+                        isLoading = false
+                    }
+                }
+            )
+        } else {
+            val q = questions[currentIndex]
+            val isSubmitted = submittedQuestions.contains(q.id)
+            val selectedIndex = answers[q.id]
+            val isBookmarked = bookmarks.contains(q.id)
+
+            // 进度条
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+            ) {
+                // 进度条
+                LinearProgressIndicator(
+                    progress = { (currentIndex + 1).toFloat() / questions.size },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(4.dp),
+                    color = Color(0xFF4CAF50),
+                    trackColor = Color(0xFFE0E0E0)
+                )
+
+                // 进度文本
+                Text(
+                    text = "第 ${currentIndex + 1}/${questions.size} 题",
+                    fontSize = 12.sp,
+                    color = Color(0xFF999999),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    textAlign = TextAlign.Center
+                )
+
+                // 题目内容区域
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState())
+                        .padding(16.dp)
+                ) {
+                    // 题型标签 + 收藏按钮
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // 题型标签
+                        Text(
+                            text = if (q.subject.isNotBlank()) "【${q.subject}】" else "【选择题】",
+                            fontSize = 13.sp,
+                            color = Color(0xFF4CAF50),
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier
+                                .background(
+                                    Color(0xFFE8F5E9),
+                                    RoundedCornerShape(4.dp)
+                                )
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                        // 收藏按钮
+                        IconButton(
+                            onClick = {
+                                bookmarks = if (isBookmarked) {
+                                    bookmarks - q.id
+                                } else {
+                                    bookmarks + q.id
+                                }
+                                saveProgress()
+                            }
+                        ) {
+                            Icon(
+                                imageVector = if (isBookmarked)
+                                    Icons.Default.Bookmark
+                                else
+                                    Icons.Default.BookmarkBorder,
+                                contentDescription = if (isBookmarked) "取消收藏" else "收藏",
+                                tint = if (isBookmarked) Color(0xFFFF9800) else Color(0xFF999999)
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(12.dp))
+
+                    // 题干
+                    Text(
+                        text = q.question,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color(0xFF333333),
+                        lineHeight = 24.sp
+                    )
+
+                    Spacer(Modifier.height(20.dp))
+
+                    // 选项
+                    val options = parseOptions(q.options)
+                    options.forEachIndexed { index, option ->
+                        val isSelected = selectedIndex == index
+                        OptionItem(
+                            text = option,
+                            index = index,
+                            isSelected = isSelected,
+                            isSubmitted = isSubmitted,
+                            isCorrect = isSubmitted && (
+                                    option.contains(q.answer, ignoreCase = true) ||
+                                            q.answer.contains(option, ignoreCase = true)
+                                    ),
+                            isWrong = isSubmitted && isSelected && !(
+                                    option.contains(q.answer, ignoreCase = true) ||
+                                            q.answer.contains(option, ignoreCase = true)
+                                    ),
+                            enabled = !isSubmitted,
+                            onClick = {
+                                if (!isSubmitted) {
+                                    answers = answers + (q.id to index)
+                                    saveProgress()
+                                }
+                            }
+                        )
+                        Spacer(Modifier.height(8.dp))
+                    }
+
+                    // 提交后显示结果
+                    if (isSubmitted) {
+                        Spacer(Modifier.height(16.dp))
+                        val isCorrect = options.getOrNull(selectedIndex ?: -1)?.let { selected ->
+                            selected.contains(q.answer, ignoreCase = true) ||
+                                    q.answer.contains(selected, ignoreCase = true)
+                        } ?: false
+
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (isCorrect) Color(0xFFE8F5E9) else Color(0xFFFFEBEE)
+                            )
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Text(
+                                    text = if (isCorrect) "✓ 回答正确！" else "✗ 回答错误",
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isCorrect) Color(0xFF2E7D32) else Color(0xFFC62828)
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    text = "正确答案：${q.answer}",
+                                    fontSize = 14.sp,
+                                    color = Color(0xFF333333)
+                                )
+                                if (q.explanation.isNotBlank()) {
+                                    Spacer(Modifier.height(8.dp))
+                                    Text(
+                                        text = "解析：${q.explanation}",
+                                        fontSize = 14.sp,
+                                        color = Color(0xFF666666)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(16.dp))
+
+                    // 统计信息
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = "正确: $correctCount/$answeredCount",
+                            fontSize = 14.sp,
+                            color = Color(0xFF4CAF50),
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 选项条目组件。
+ */
+@Composable
+private fun OptionItem(
+    text: String,
+    index: Int,
+    isSelected: Boolean,
+    isSubmitted: Boolean,
+    isCorrect: Boolean,
+    isWrong: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    val label = ('A' + index).toString()
+    val bgColor = when {
+        isSubmitted && isCorrect -> Color(0xFFE8F5E9)
+        isSubmitted && isWrong -> Color(0xFFFFEBEE)
+        isSelected -> Color(0xFFE3F2FD)
+        else -> Color.White
+    }
+    val borderColor = when {
+        isSubmitted && isCorrect -> Color(0xFF4CAF50)
+        isSubmitted && isWrong -> Color(0xFFE53935)
+        isSelected -> Color(0xFF2196F3)
+        else -> Color(0xFFE0E0E0)
+    }
+    val textColor = when {
+        isSubmitted && isCorrect -> Color(0xFF2E7D32)
+        isSubmitted && isWrong -> Color(0xFFC62828)
+        else -> Color(0xFF333333)
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled, onClick = onClick),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = bgColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isSelected) 2.dp else 0.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(1.dp, borderColor, RoundedCornerShape(8.dp))
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // 选项字母
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .background(
+                        when {
+                            isSubmitted && isCorrect -> Color(0xFF4CAF50)
+                            isSubmitted && isWrong -> Color(0xFFE53935)
+                            isSelected -> Color(0xFF2196F3)
+                            else -> Color(0xFFF5F5F5)
+                        },
+                        RoundedCornerShape(14.dp)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = label,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isSelected || isSubmitted) Color.White else Color(0xFF666666)
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            // 选项文本
+            Text(
+                text = text,
+                fontSize = 15.sp,
+                color = textColor,
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+}
+
+/**
+ * 底部操作栏。
+ */
+@Composable
+private fun AnswerBottomBar(
+    currentIndex: Int,
+    totalCount: Int,
+    isSubmitted: Boolean,
+    hasPrev: Boolean,
+    hasNext: Boolean,
+    onPrev: () -> Unit,
+    onNext: () -> Unit,
+    onSubmit: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        // 上一题
+        OutlinedButton(
+            onClick = onPrev,
+            enabled = hasPrev,
+            modifier = Modifier
+                .weight(1f)
+                .height(44.dp),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            Text("上一题", fontSize = 14.sp)
+        }
+
+        // 提交答案
+        Button(
+            onClick = onSubmit,
+            enabled = !isSubmitted,
+            modifier = Modifier
+                .weight(1f)
+                .height(44.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFF4CAF50)
+            ),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            Text(
+                text = if (isSubmitted) "已提交" else "提交答案",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        // 下一题
+        OutlinedButton(
+            onClick = onNext,
+            enabled = hasNext,
+            modifier = Modifier
+                .weight(1f)
+                .height(44.dp),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            Text("下一题", fontSize = 14.sp)
+        }
+    }
+}
+
+/**
+ * 练习完成界面。
+ */
+@Composable
+private fun CompleteScreen(
+    correctCount: Int,
+    answeredCount: Int,
+    totalCount: Int,
+    startTime: Long,
+    onFinish: () -> Unit,
+    onRestart: () -> Unit
+) {
+    val durationSeconds = (System.currentTimeMillis() - startTime) / 1000
+    val accuracy = if (answeredCount > 0) correctCount.toFloat() / answeredCount else 0f
+    val durationText = if (durationSeconds >= 60) {
+        "${durationSeconds / 60}分${durationSeconds % 60}秒"
+    } else {
+        "${durationSeconds}秒"
+    }
+
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(32.dp),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "🎉 练习完成！",
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF4CAF50)
+                )
+
+                Spacer(Modifier.height(24.dp))
+
+                // 统计信息
+                StatItem("总题数", "$totalCount 题")
+                Spacer(Modifier.height(8.dp))
+                StatItem("已答题", "$answeredCount 题")
+                Spacer(Modifier.height(8.dp))
+                StatItem("正确数", "$correctCount 题")
+                Spacer(Modifier.height(8.dp))
+                StatItem("正确率", "${String.format("%.1f", accuracy * 100)}%")
+                Spacer(Modifier.height(8.dp))
+                StatItem("耗时", durationText)
+
+                Spacer(Modifier.height(24.dp))
+
+                Button(
+                    onClick = onRestart,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF4CAF50)
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("再来一次", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                }
+
+                Spacer(Modifier.height(8.dp))
+
+                OutlinedButton(
+                    onClick = onFinish,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("返回题库列表", fontSize = 14.sp)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 统计项行。
+ */
+@Composable
+private fun StatItem(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = label,
+            fontSize = 15.sp,
+            color = Color(0xFF666666)
+        )
+        Text(
+            text = value,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Medium,
+            color = Color(0xFF333333)
+        )
+    }
+}
+
+/**
+ * 解析选项 JSON 字符串。
+ */
+private fun parseOptions(options: String): List<String> {
+    if (options.isBlank()) return emptyList()
+    return try {
+        com.google.gson.JsonParser.parseString(options).asJsonArray
+            .map { it.asString }
+    } catch (_: Exception) {
+        options.split("\n").filter { it.isNotBlank() }
+    }
+}

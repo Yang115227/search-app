@@ -6,9 +6,11 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 
 import com.smartsearch.app.data.local.dao.PracticeRecordDao
+import com.smartsearch.app.data.local.dao.PracticeSessionDao
 import com.smartsearch.app.data.local.dao.QuestionDao
 import com.smartsearch.app.data.local.dao.WrongQuestionDao
 import com.smartsearch.app.data.local.entity.PracticeRecordEntity
+import com.smartsearch.app.data.local.entity.PracticeSessionEntity
 import com.smartsearch.app.data.local.entity.QuestionEntity
 import com.smartsearch.app.data.local.entity.WrongQuestionEntity
 
@@ -39,9 +41,10 @@ import com.smartsearch.app.data.local.entity.WrongQuestionEntity
     entities = [
         QuestionEntity::class,
         WrongQuestionEntity::class,
-        PracticeRecordEntity::class
+        PracticeRecordEntity::class,
+        PracticeSessionEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class QuizDatabase : RoomDatabase() {
@@ -49,6 +52,7 @@ abstract class QuizDatabase : RoomDatabase() {
     abstract fun questionDao(): QuestionDao
     abstract fun wrongQuestionDao(): WrongQuestionDao
     abstract fun practiceRecordDao(): PracticeRecordDao
+    abstract fun practiceSessionDao(): PracticeSessionDao
 
     companion object {
         private const val DATABASE_NAME = "quiz_database.db"

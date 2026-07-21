@@ -43,6 +43,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.navigation.NavType
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 
 /**
  * 首页 —— 权限校验、悬浮球启动、模式切换的统一入口。
@@ -225,18 +230,54 @@ class HomeActivity : ComponentActivity() {
         FloatWindowManager.init(this)
 
         setContent {
+            val navController = rememberNavController()
+
             MaterialTheme(
                 colorScheme = lightColorScheme()
             ) {
-                HomeScreen(
-                    onStartAccessibilitySearch = { startAccessibilitySearch() },
-                    onStartScreenCaptureSearch = { startScreenCaptureSearch() },
-                    onImportQuestions = { openFilePicker() },
-                    onOpenQuestionBank = { QuestionBankDialog(this, onImportClick = { openFilePicker() }).show() },
-                    onOpenPractice = { startPractice() },
-                    onOpenWrongBook = { openWrongBook() },
-                    permissionStatus = rememberPermissionStatus()
-                )
+                NavHost(
+                    navController = navController,
+                    startDestination = "home"
+                ) {
+                    composable("home") {
+                        HomeScreen(
+                            onStartAccessibilitySearch = { startAccessibilitySearch() },
+                            onStartScreenCaptureSearch = { startScreenCaptureSearch() },
+                            onImportQuestions = { openFilePicker() },
+                            onOpenQuestionBank = { QuestionBankDialog(this@HomeActivity, onImportClick = { openFilePicker() }).show() },
+                            onOpenPractice = { startPractice() },
+                            onOpenWrongBook = { openWrongBook() },
+                            permissionStatus = rememberPermissionStatus(),
+                            onOpenPracticeList = {
+                                navController.navigate("question_bank_list")
+                            }
+                        )
+                    }
+                    composable("question_bank_list") {
+                        QuestionBankListScreen(
+                            onBack = { navController.popBackStack() },
+                            onStartPractice = { subject, mode ->
+                                navController.navigate("answer/$subject/$mode")
+                            }
+                        )
+                    }
+                    composable(
+                        route = "answer/{subject}/{mode}",
+                        arguments = listOf(
+                            navArgument("subject") { type = NavType.StringType },
+                            navArgument("mode") { type = NavType.StringType }
+                        )
+                    ) { backStackEntry ->
+                        val subject = backStackEntry.arguments?.getString("subject") ?: ""
+                        val mode = backStackEntry.arguments?.getString("mode") ?: "SEQUENTIAL"
+                        AnswerScreen(
+                            subject = subject,
+                            mode = mode,
+                            onBack = { navController.popBackStack() },
+                            onFinish = { navController.popBackStack("question_bank_list", false) }
+                        )
+                    }
+                }
             }
         }
     }
@@ -481,7 +522,8 @@ fun HomeScreen(
     onOpenQuestionBank: () -> Unit,
     onOpenPractice: () -> Unit,
     onOpenWrongBook: () -> Unit,
-    permissionStatus: Map<String, PermissionManager.PermissionStatus>
+    permissionStatus: Map<String, PermissionManager.PermissionStatus>,
+    onOpenPracticeList: () -> Unit = onOpenPractice
 ) {
     val scrollState = rememberScrollState()
 
@@ -597,8 +639,8 @@ fun HomeScreen(
             // 练习
             FunctionCard(
                 title = "练习",
-                subtitle = "随机出题",
-                onClick = onOpenPractice,
+                subtitle = "顺序/随机出题",
+                onClick = onOpenPracticeList,
                 modifier = Modifier.weight(1f)
             )
 
