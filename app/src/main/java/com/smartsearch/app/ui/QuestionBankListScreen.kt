@@ -63,6 +63,8 @@ fun QuestionBankListScreen(
                     totalCount = allCount
                     if (items.isNotEmpty()) {
                         selectedSubject = items.first().subject
+                    } else {
+                        selectedSubject = ""
                     }
                 } catch (e: Exception) {
                     Log.e("QuestionBankList", "加载题库数据异常: ${e.message}", e)
