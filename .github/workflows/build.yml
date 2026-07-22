@@ -39,6 +39,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# ── 权限配置 ──
+permissions:
+  contents: write
+  actions: read
+
 # ── 全局环境变量 ──
 env:
   JAVA_VERSION: "17"
@@ -273,12 +278,72 @@ jobs:
           fi
 
   # ════════════════════════════════════════════
-  # Job 4: 构建摘要（汇总所有 job 结果）
+  # Job 4: 创建 Release（将 APK 发布为 Release 附件）
+  # ════════════════════════════════════════════
+  create_release:
+    name: "🚀 发布 Release"
+    runs-on: ubuntu-latest
+    needs: [build_debug, build_release]
+    # 仅在 push 到 main/master 时创建 Release
+    if: ${{ github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == 'master') }}
+
+    steps:
+      - name: 拉取源码（用于 Release 日志）
+        uses: actions/checkout@v4
+
+      - name: 下载 Debug APK
+        uses: actions/download-artifact@v4
+        with:
+          name: smartsearch-debug
+          path: release-assets
+
+      - name: 下载 Release APK
+        uses: actions/download-artifact@v4
+        with:
+          name: smartsearch-release
+          path: release-assets
+
+      - name: 生成 Release 标签与名称
+        id: meta
+        run: |
+          echo "tag=build-${{ github.run_number }}" >> $GITHUB_OUTPUT
+          echo "name=构建 #${{ github.run_number }} (${{ github.sha }})" >> $GITHUB_OUTPUT
+
+      - name: 创建 Release
+        run: |
+          gh release create "${{ steps.meta.outputs.tag }}" \
+            --title "${{ steps.meta.outputs.name }}" \
+            --notes "## 自动构建 #${{ github.run_number }}
+
+          - 提交: ${{ github.sha }}
+          - 分支: ${{ github.ref_name }}
+          - 触发: ${{ github.event_name }}
+
+          ### 下载 APK
+          | 文件 | 说明 |
+          |------|------|
+          | \`app-debug.apk\` | Debug 版本（可直接安装） |
+          | \`app-release.apk\` | Release 版本（签名 APK） |" \
+            --target ${{ github.sha }} \
+            release-assets/*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 输出 Release 链接
+        run: |
+          echo "## ✅ Release 已创建" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Release 名称: ${{ steps.meta.outputs.name }}" >> $GITHUB_STEP_SUMMARY
+          echo "Release 标签: \`${{ steps.meta.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "可通过 GitHub Releases 页面下载 APK" >> $GITHUB_STEP_SUMMARY
+
+  # ════════════════════════════════════════════
+  # Job 5: 构建摘要（汇总所有 job 结果）
   # ════════════════════════════════════════════
   summary:
     name: "📋 构建摘要"
     runs-on: ubuntu-latest
-    needs: [lint_and_test, build_debug, build_release]
+    needs: [lint_and_test, build_debug, build_release, create_release]
     if: always()
 
     steps:
@@ -293,6 +358,13 @@ jobs:
           echo "| 📦 Release APK | ${{ needs.build_release.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 下载 APK" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| 方式 | 说明 |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|------|" >> $GITHUB_STEP_SUMMARY
+          echo "| 🚀 **Releases** | 访问仓库 Releases 页面下载 APK（无需登录 GitHub） |" >> $GITHUB_STEP_SUMMARY
+          echo "| 📦 **Artifacts** | 在 Actions 页面 Artifacts 区域下载（需登录 GitHub） |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 下载 APK（Artifacts）" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "在构建完成后，进入 Actions 页面 → 点击本次运行 → 在 **Artifacts** 区域下载：" >> $GITHUB_STEP_SUMMARY
           echo "- \`smartsearch-debug.zip\` - Debug APK" >> $GITHUB_STEP_SUMMARY
