@@ -98,7 +98,6 @@ class FloatingWindowService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        AccessibilitySearchServiceHolder.instance = this
         density = resources.displayMetrics.density
         ballSizePx = (BALL_SIZE_DP * density).toInt()
         val metrics = resources.displayMetrics
