@@ -402,11 +402,6 @@ object FloatWindowManager {
         }
     }
 
-    /**
-     * 获取当前搜题模式。
-     */
-    fun getCurrentSearchMode(): SearchMode = currentSearchMode
-
     // ==================== 销毁逻辑 ====================
 
     /**
@@ -453,9 +448,6 @@ object FloatWindowManager {
     }
 
     // ==================== 状态查询 ====================
-
-    /** 获取当前搜题模式 */
-    fun getCurrentSearchMode(): SearchMode = currentSearchMode
 
     /** 获取当前悬浮窗状态 */
     fun getCurrentState(): FloatWindowState = currentState
