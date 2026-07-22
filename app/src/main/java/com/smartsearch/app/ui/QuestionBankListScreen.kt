@@ -1,5 +1,6 @@
 package com.smartsearch.app.ui
 
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -49,18 +50,22 @@ fun QuestionBankListScreen(
 
     // 加载题库数据
     LaunchedEffect(Unit) {
-        val db = QuizDatabase.getInstance(context)
-        withContext(Dispatchers.IO) {
-            val allSubjects = db.questionDao().getAllSubjects()
-            val items = allSubjects.map { subject ->
-                SubjectCountItem(subject, db.questionDao().getCountBySubject(subject))
+        try {
+            val db = QuizDatabase.getInstance(context)
+            withContext(Dispatchers.IO) {
+                val allSubjects = db.questionDao().getAllSubjects()
+                val items = allSubjects.map { subject ->
+                    SubjectCountItem(subject, db.questionDao().getCountBySubject(subject))
+                }
+                val allCount = db.questionDao().getCount()
+                subjects = items
+                totalCount = allCount
+                if (items.isNotEmpty()) {
+                    selectedSubject = items.first().subject
+                }
             }
-            val allCount = db.questionDao().getCount()
-            subjects = items
-            totalCount = allCount
-            if (items.isNotEmpty()) {
-                selectedSubject = items.first().subject
-            }
+        } catch (e: Exception) {
+            Log.e("QuestionBankList", "加载题库数据异常: ${e.message}", e)
         }
     }
 

@@ -51,6 +51,18 @@ class FloatingWindowService : Service() {
         private const val NOTIFICATION_CHANNEL_ID = "floating_window_channel"
         private const val NOTIFICATION_ID = 1001
 
+        @Volatile
+        private var serviceInstance: FloatingWindowService? = null
+
+        /**
+         * 重新显示悬浮球（从搜索模式退出后调用）。
+         */
+        fun showAllBalls() {
+            serviceInstance?.mainHandler?.post {
+                serviceInstance?.attachAllBalls()
+            }
+        }
+
         /** Intent Extra: 启动录屏搜题 */
         const val EXTRA_START_SCREEN_CAPTURE = "start_screen_capture"
 
@@ -98,6 +110,7 @@ class FloatingWindowService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        serviceInstance = this
         density = resources.displayMetrics.density
         ballSizePx = (BALL_SIZE_DP * density).toInt()
         val metrics = resources.displayMetrics
@@ -131,6 +144,7 @@ class FloatingWindowService : Service() {
 
     override fun onDestroy() {
         detachAllBalls()
+        serviceInstance = null
         super.onDestroy()
     }
 
@@ -277,6 +291,20 @@ class FloatingWindowService : Service() {
             }
         }
         floatingBalls.clear()
+    }
+
+    /**
+     * 隐藏所有悬浮球（进入搜索模式前调用）。
+     * 区别于 detachAllBalls，仅移除 View 不清除列表，以便后续重新显示。
+     */
+    private fun hideAllBalls() {
+        for (ball in floatingBalls) {
+            try {
+                windowManager?.removeView(ball)
+            } catch (e: IllegalArgumentException) {
+                // 已移除
+            }
+        }
     }
 
     // ==================== 悬浮球视图 ====================
@@ -446,6 +474,7 @@ class FloatingWindowService : Service() {
     // ==================== 搜题触发入口 ====================
 
     private fun triggerAccessibilitySearch() {
+        hideAllBalls()
         if (PermissionManager.checkFloatingWindow(this) != PermissionManager.PermissionStatus.GRANTED) {
             notifyPermissionRequired()
             return
@@ -470,6 +499,7 @@ class FloatingWindowService : Service() {
     }
 
     private fun startScreenCaptureMode() {
+        hideAllBalls()
         if (PermissionManager.checkFloatingWindow(this) != PermissionManager.PermissionStatus.GRANTED) {
             notifyPermissionRequired()
             return

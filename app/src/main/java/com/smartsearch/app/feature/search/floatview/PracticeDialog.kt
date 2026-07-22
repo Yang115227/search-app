@@ -15,6 +15,7 @@ import android.widget.RadioButton
 import android.widget.RadioGroup
 import android.widget.ScrollView
 import android.widget.TextView
+import android.util.Log
 import com.smartsearch.app.data.local.QuizDatabase
 import com.smartsearch.app.data.local.entity.PracticeRecordEntity
 import com.smartsearch.app.data.local.entity.QuestionEntity
@@ -247,24 +248,30 @@ class PracticeDialog(private val context: Context) {
      */
     private fun loadQuestions() {
         CoroutineScope(Dispatchers.Main).launch {
-            val dao = QuizDatabase.getInstance(context).questionDao()
-            val all = withContext(Dispatchers.IO) {
-                dao.getAllQuestions()
-            }
-            allQuestions = if (currentMode == PracticeMode.RANDOM) {
-                all.shuffled()
-            } else {
-                all.sortedBy { it.id }
-            }
+            try {
+                val dao = QuizDatabase.getInstance(context).questionDao()
+                val all = withContext(Dispatchers.IO) {
+                    dao.getAllQuestions()
+                }
+                allQuestions = if (currentMode == PracticeMode.RANDOM) {
+                    all.shuffled()
+                } else {
+                    all.sortedBy { it.id }
+                }
 
-            if (allQuestions.isEmpty()) {
-                progressText.text = "题库为空，请先导入题目"
+                if (allQuestions.isEmpty()) {
+                    progressText.text = "题库为空，请先导入题目"
+                    submitButton.isEnabled = false
+                    return@launch
+                }
+
+                currentIndex = 0
+                showQuestion()
+            } catch (e: Exception) {
+                Log.e("PracticeDialog", "加载题目异常: ${e.message}", e)
+                progressText.text = "加载失败，请重试"
                 submitButton.isEnabled = false
-                return@launch
             }
-
-            currentIndex = 0
-            showQuestion()
         }
     }
 

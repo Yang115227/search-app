@@ -207,14 +207,17 @@ object FloatWindowManager {
     }
 
     /**
-     * 重新唤起选区框（调整模式）。
-     * 在连续搜题模式下，点击答案弹窗的「选区」按钮时调用。
-     * 选区框显示上次保存的选区位置，调整完成后自动隐藏。
+     * 重新唤起选区框（调整模式或重新选题）。
+     * 在连续搜题模式或答案显示模式下，点击答案弹窗的「选区」按钮时调用。
+     * - 连续搜题模式：调整模式，手指抬起自动隐藏，继续轮询
+     * - 答案显示模式：普通模式，显示「开始搜题」按钮，点击后进入连续搜题
      */
     fun showOverlayForAdjustment(context: Context) {
-        if (currentState != FloatWindowState.CONTINUOUS_SEARCHING) return
+        if (currentState != FloatWindowState.CONTINUOUS_SEARCHING &&
+            currentState != FloatWindowState.ANSWERING) return
 
         val ctx = context.applicationContext
+        val isContinuous = currentState == FloatWindowState.CONTINUOUS_SEARCHING
 
         selectOverlay = FloatSelectOverlay(ctx).apply {
             // 恢复上次选区位置
@@ -223,28 +226,32 @@ object FloatWindowManager {
                 setSelectionRect(savedRect)
             }
 
-            // 设置为调整模式：手指抬起后自动隐藏
-            isAdjustmentMode = true
-            isContinuousMode = true
+            // 连续搜题模式：调整模式，手指抬起自动隐藏
+            isAdjustmentMode = isContinuous
+            isContinuousMode = isContinuous
 
-            // 点击 X 关闭按钮 → 销毁选区框，回到连续搜题模式
+            // 点击 X 关闭按钮 → 回到之前的状态
             onDismiss = {
                 hideSelectOverlay()
-                // 不退出连续搜题模式，继续轮询
             }
 
-            // 拖拽/缩放时更新选区（不触发搜索，仅更新显示）
+            // 拖拽/缩放时更新选区
             onSelectionChanged = { rect ->
                 lastSelectionRect = rect
             }
 
-            // 调整完成（手指抬起）→ 自动隐藏，触发搜索
+            // 调整完成（手指抬起）→ 自动隐藏，触发搜索（仅连续搜题模式）
             onAdjustmentComplete = { rect ->
                 lastSelectionRect = rect
-                // 触发搜索
                 this@FloatWindowManager.onContinuousSearch?.invoke(rect)
-                // 隐藏选区框
                 hideSelectOverlay()
+            }
+
+            // 非调整模式（ANSWERING）：点击「开始搜题」进入连续搜题
+            onStartContinuousSearch = { rect ->
+                lastSelectionRect = rect
+                this@FloatWindowManager.onRectSelected?.invoke(rect)
+                startContinuousSearch(ctx)
             }
 
             // 附加到窗口
@@ -325,9 +332,7 @@ object FloatWindowManager {
 
             // 点击「选区」按钮 → 重新唤起选区框
             onSelectAreaClick = {
-                if (currentState == FloatWindowState.CONTINUOUS_SEARCHING) {
-                    showOverlayForAdjustment(ctx)
-                }
+                showOverlayForAdjustment(ctx)
             }
 
             attachToWindow()
@@ -440,6 +445,8 @@ object FloatWindowManager {
         lastSelectionRect = null
         currentSearchMode = SearchMode.ACCESSIBILITY
         currentState = FloatWindowState.IDLE
+        // 重新显示悬浮球
+        FloatingWindowService.showAllBalls()
     }
 
     // ==================== 状态查询 ====================

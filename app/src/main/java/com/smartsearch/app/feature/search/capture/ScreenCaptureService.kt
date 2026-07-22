@@ -404,39 +404,43 @@ class ScreenCaptureService : Service() {
     private fun startForegroundNotification() {
         if (isForegroundStarted) return
 
-        val pendingIntent = PendingIntent.getActivity(
-            this,
-            0,
-            packageManager.getLaunchIntentForPackage(packageName),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
+        try {
+            val pendingIntent = PendingIntent.getActivity(
+                this,
+                0,
+                packageManager.getLaunchIntentForPackage(packageName),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
 
-        val notification = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            Notification.Builder(this, NOTIFICATION_CHANNEL_ID)
-                .setContentTitle("录屏搜题运行中")
-                .setContentText("正在识别屏幕内容...")
-                .setSmallIcon(android.R.drawable.ic_menu_camera)
-                .setContentIntent(pendingIntent)
-                .setOngoing(true)
-                .build()
-        } else {
-            @Suppress("DEPRECATION")
-            Notification.Builder(this)
-                .setContentTitle("录屏搜题运行中")
-                .setContentText("正在识别屏幕内容...")
-                .setSmallIcon(android.R.drawable.ic_menu_camera)
-                .setContentIntent(pendingIntent)
-                .setOngoing(true)
-                .build()
-        }
+            val notification = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                Notification.Builder(this, NOTIFICATION_CHANNEL_ID)
+                    .setContentTitle("录屏搜题运行中")
+                    .setContentText("正在识别屏幕内容...")
+                    .setSmallIcon(android.R.drawable.ic_menu_camera)
+                    .setContentIntent(pendingIntent)
+                    .setOngoing(true)
+                    .build()
+            } else {
+                @Suppress("DEPRECATION")
+                Notification.Builder(this)
+                    .setContentTitle("录屏搜题运行中")
+                    .setContentText("正在识别屏幕内容...")
+                    .setSmallIcon(android.R.drawable.ic_menu_camera)
+                    .setContentIntent(pendingIntent)
+                    .setOngoing(true)
+                    .build()
+            }
 
-        // Android 14+ 必须指定 foregroundServiceType
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(NOTIFICATION_ID, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION)
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
+            // Android 14+ 必须指定 foregroundServiceType
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                startForeground(NOTIFICATION_ID, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION)
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
+            isForegroundStarted = true
+        } catch (e: Exception) {
+            Log.e(TAG, "启动前台通知异常: ${e.message}", e)
         }
-        isForegroundStarted = true
     }
 
     // ==================== 后台线程 ====================
@@ -466,19 +470,20 @@ class ScreenCaptureService : Service() {
             return
         }
 
-        this.selectionRect = rect
+        try {
+            this.selectionRect = rect
 
-        // 启动前台服务
-        startForegroundNotification()
+            // 启动前台服务
+            startForegroundNotification()
 
-        // 标记录屏权限已授予
-        PermissionManager.markScreenCaptureGranted(this)
+            // 标记录屏权限已授予
+            PermissionManager.markScreenCaptureGranted(this)
 
-        // 创建 MediaProjection
-        mediaProjection = mediaProjectionManager?.getMediaProjection(
-            Activity.RESULT_OK,
-            projectionIntent
-        )
+            // 创建 MediaProjection
+            mediaProjection = mediaProjectionManager?.getMediaProjection(
+                Activity.RESULT_OK,
+                projectionIntent
+            )
 
         if (mediaProjection == null) {
             Log.e(TAG, "无法获取 MediaProjection")
@@ -525,6 +530,15 @@ class ScreenCaptureService : Service() {
         isCapturing = true
         blackFrameCount = 0
         Log.d(TAG, "录屏采集已启动")
+        } catch (e: Exception) {
+            Log.e(TAG, "startCapture 异常: ${e.message}", e)
+            // 确保前台通知已发出
+            if (!isForegroundStarted) {
+                try { startForegroundNotification() } catch (_: Exception) { }
+            }
+            switchToAccessibilityMode()
+            stopSelf()
+        }
     }
 
     // ==================== 图像帧处理 ====================

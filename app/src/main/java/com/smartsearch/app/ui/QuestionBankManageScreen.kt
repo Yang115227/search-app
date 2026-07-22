@@ -1,5 +1,6 @@
 package com.smartsearch.app.ui
 
+import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -66,21 +67,26 @@ fun QuestionBankManageScreen(
     fun loadData() {
         scope.launch {
             isLoading = true
-            val db = QuizDatabase.getInstance(context)
-            val (items, allCount) = withContext(Dispatchers.IO) {
-                val allSubjects = db.questionDao().getAllSubjects()
-                val itemList = allSubjects.map { subject ->
-                    SubjectManageItem(subject, db.questionDao().getCountBySubject(subject))
+            try {
+                val db = QuizDatabase.getInstance(context)
+                val (items, allCount) = withContext(Dispatchers.IO) {
+                    val allSubjects = db.questionDao().getAllSubjects()
+                    val itemList = allSubjects.map { subject ->
+                        SubjectManageItem(subject, db.questionDao().getCountBySubject(subject))
+                    }
+                    val count = db.questionDao().getCount()
+                    Pair(itemList, count)
                 }
-                val count = db.questionDao().getCount()
-                Pair(itemList, count)
+                subjects = items
+                totalCount = allCount
+                if (selectedSubject.isNotEmpty() && items.none { it.subject == selectedSubject }) {
+                    selectedSubject = ""
+                }
+                isLoading = false
+            } catch (e: Exception) {
+                Log.e("QuestionBankManage", "加载题库数据异常: ${e.message}", e)
+                isLoading = false
             }
-            subjects = items
-            totalCount = allCount
-            if (selectedSubject.isNotEmpty() && items.none { it.subject == selectedSubject }) {
-                selectedSubject = ""
-            }
-            isLoading = false
         }
     }
 
