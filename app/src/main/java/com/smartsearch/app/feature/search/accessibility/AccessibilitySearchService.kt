@@ -13,6 +13,7 @@ import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import com.smartsearch.app.core.service.FloatingWindowService
+import com.smartsearch.app.core.service.AccessibilitySearchServiceHolder
 import com.smartsearch.app.core.service.FloatWindowManager
 import com.smartsearch.app.core.utils.RectUtil
 import com.smartsearch.app.feature.search.capture.QuestionBankSearcher
@@ -81,7 +82,7 @@ class AccessibilitySearchService : AccessibilityService() {
 
         /**
          * 获取当前服务实例。
-         * 与 FloatingWindowService.AccessibilitySearchServiceHolder 作用相同，
+         * 与 AccessibilitySearchServiceHolder 作用相同，
          * 提供更直接的获取方式。
          */
         fun getInstance(): AccessibilitySearchService? = serviceInstance
@@ -133,11 +134,11 @@ class AccessibilitySearchService : AccessibilityService() {
         statusBarHeightPx = getStatusBarHeight()
 
         // 注册到静态持有者，供 FloatingWindowService 获取实例
-        FloatingWindowService.AccessibilitySearchServiceHolder.instance = this
+        AccessibilitySearchServiceHolder.instance = this
         serviceInstance = this
 
         // 通知 FloatingWindowService 启用防抖模式
-        FloatingWindowService.AccessibilitySearchServiceHolder.serviceInstance?.setAntiShakeEnabled(true)
+        AccessibilitySearchServiceHolder.serviceInstance?.setAntiShakeEnabled(true)
 
         // 配置无障碍服务信息
         val info = AccessibilityServiceInfo().apply {
@@ -179,10 +180,10 @@ class AccessibilitySearchService : AccessibilityService() {
         cancelThrottle()
 
         // 通知 FloatingWindowService 禁用防抖模式
-        FloatingWindowService.AccessibilitySearchServiceHolder.serviceInstance?.setAntiShakeEnabled(false)
+        AccessibilitySearchServiceHolder.serviceInstance?.setAntiShakeEnabled(false)
 
         // 清除静态持有者引用，防止内存泄漏
-        FloatingWindowService.AccessibilitySearchServiceHolder.instance = null
+        AccessibilitySearchServiceHolder.instance = null
         serviceInstance = null
         Log.d(TAG, "无障碍搜题服务已销毁")
     }

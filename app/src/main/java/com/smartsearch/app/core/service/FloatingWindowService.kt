@@ -98,7 +98,7 @@ class FloatingWindowService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        AccessibilitySearchServiceHolder.serviceInstance = this
+        AccessibilitySearchServiceHolder.instance = this
         density = resources.displayMetrics.density
         ballSizePx = (BALL_SIZE_DP * density).toInt()
         val metrics = resources.displayMetrics
@@ -507,5 +507,12 @@ object AccessibilitySearchServiceHolder {
         set(value) {
             field = value
             Log.d("AccessibilitySearchHolder", "AccessibilitySearchService 实例已${if (value != null) "绑定" else "解绑"}")
+        }
+
+    /** 服务实例，用于调用 setAntiShakeEnabled 等内部方法 */
+    var serviceInstance: AccessibilitySearchService? = null
+        set(value) {
+            field = value
+            instance = value
         }
 }
