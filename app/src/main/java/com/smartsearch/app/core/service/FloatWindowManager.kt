@@ -7,7 +7,6 @@ import android.os.Looper
 import com.smartsearch.app.feature.search.capture.ScreenCaptureService
 import com.smartsearch.app.feature.search.floatview.AnswerFloatWindow
 import com.smartsearch.app.feature.search.floatview.FloatSelectOverlay
-import com.smartsearch.app.feature.search.floatview.FunctionPanelView
 
 /**
  * 悬浮窗统一管理器 —— 管理 FloatSelectOverlay 与 AnswerFloatWindow 两个悬浮窗的
@@ -399,68 +398,6 @@ object FloatWindowManager {
      * 获取当前搜题模式。
      */
     fun getCurrentSearchMode(): SearchMode = currentSearchMode
-
-    // ==================== 功能面板管理 ====================
-
-    /** 功能面板实例 */
-    private var functionPanel: FunctionPanelView? = null
-
-    /**
-     * 显示功能面板。
-     *
-     * @param context 上下文
-     * @param panelX 面板左上角 X（屏幕坐标）
-     * @param panelY 面板左上角 Y（屏幕坐标）
-     * @param panelWidth 面板宽度
-     * @param panelHeight 面板高度
-     * @param onScreenCaptureClick 录屏搜题回调
-     * @param onAccessibilityClick 无障碍搜题回调
-     * @param onCameraClick 相机扫描回调
-     * @param onCloseClick 关闭悬浮窗回调
-     */
-    fun showFunctionPanel(
-        context: Context,
-        panelX: Int,
-        panelY: Int,
-        panelWidth: Int,
-        panelHeight: Int,
-        onScreenCaptureClick: () -> Unit,
-        onAccessibilityClick: () -> Unit,
-        onCameraClick: () -> Unit,
-        onCloseClick: () -> Unit
-    ) {
-        dismissFunctionPanel()
-
-        val ctx = context.applicationContext
-        functionPanel = FunctionPanelView(ctx).apply {
-            this.onDismiss = { dismissFunctionPanel() }
-            this.onScreenCaptureClick = {
-                dismissFunctionPanel()
-                onScreenCaptureClick()
-            }
-            this.onAccessibilityClick = {
-                dismissFunctionPanel()
-                onAccessibilityClick()
-            }
-            this.onCameraClick = {
-                dismissFunctionPanel()
-                onCameraClick()
-            }
-            this.onCloseClick = {
-                dismissFunctionPanel()
-                onCloseClick()
-            }
-            attachToWindow(panelX, panelY, panelWidth, panelHeight)
-        }
-    }
-
-    /**
-     * 关闭功能面板。
-     */
-    fun dismissFunctionPanel() {
-        functionPanel?.detachFromWindow()
-        functionPanel = null
-    }
 
     // ==================== 销毁逻辑 ====================
 
