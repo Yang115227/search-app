@@ -273,7 +273,6 @@ class HomeActivity : ComponentActivity() {
                             onOpenQuestionBank = { navController.navigate("question_bank_manage") },
                             onOpenPractice = { startPractice() },
                             onOpenWrongBook = { openWrongBook() },
-                            permissionStatus = rememberPermissionStatus(),
                             onOpenPracticeList = {
                                 navController.navigate("question_bank_list")
                             }
@@ -314,45 +313,6 @@ class HomeActivity : ComponentActivity() {
                 }
             }
         }
-    }
-
-    // ==================== 权限状态 ====================
-
-    /**
-     * 组合四个权限状态，响应式刷新。
-     */
-    @Composable
-    private fun rememberPermissionStatus(): Map<String, PermissionManager.PermissionStatus> {
-        val context = LocalContext.current
-        var status by remember {
-            mutableStateOf(
-                PermissionManager.getAllPermissions(
-                    context,
-                    AccessibilitySearchService::class.java.name,
-                    ScreenCaptureService::class.java.name
-                )
-            )
-        }
-
-        // 监听 Activity 生命周期，每次 onResume 时刷新权限状态
-        DisposableEffect(context) {
-            val activity = context as? ComponentActivity ?: return@DisposableEffect onDispose { }
-            val observer = LifecycleEventObserver { _, event ->
-                if (event == Lifecycle.Event.ON_RESUME) {
-                    status = PermissionManager.getAllPermissions(
-                        context,
-                        AccessibilitySearchService::class.java.name,
-                        ScreenCaptureService::class.java.name
-                    )
-                }
-            }
-            activity.lifecycle.addObserver(observer)
-            onDispose {
-                activity.lifecycle.removeObserver(observer)
-            }
-        }
-
-        return status
     }
 
     // ==================== 无障碍搜题 ====================
@@ -602,7 +562,6 @@ fun HomeScreen(
     onOpenQuestionBank: () -> Unit,
     onOpenPractice: () -> Unit,
     onOpenWrongBook: () -> Unit,
-    permissionStatus: Map<String, PermissionManager.PermissionStatus>,
     onOpenPracticeList: () -> Unit = onOpenPractice
 ) {
     val scrollState = rememberScrollState()
@@ -629,10 +588,6 @@ fun HomeScreen(
             color = Color.Gray
         )
         Spacer(modifier = Modifier.height(24.dp))
-
-        // ── 权限状态卡片 ──
-        PermissionStatusCard(permissionStatus)
-        Spacer(modifier = Modifier.height(16.dp))
 
         // ── 搜题模式按钮 ──
         Text(
@@ -695,7 +650,7 @@ fun HomeScreen(
             shape = RoundedCornerShape(12.dp)
         ) {
             Text(
-                text = "🟠 扫描搜题（相机识别）",
+                text = "🟠 扫描搜题（相机OCR识别）",
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold
             )
@@ -757,64 +712,6 @@ fun HomeScreen(
         }
 
         Spacer(modifier = Modifier.height(32.dp))
-    }
-}
-
-/**
- * 权限状态卡片 —— 展示四项权限的授予状态。
- */
-@Composable
-fun PermissionStatusCard(status: Map<String, PermissionManager.PermissionStatus>) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = "权限状态",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // 四项权限状态
-            PermissionItem("悬浮窗", status["floating_window"])
-            PermissionItem("无障碍", status["accessibility"])
-            PermissionItem("录屏", status["screen_capture"])
-            PermissionItem("相机", status["camera"])
-        }
-    }
-}
-
-/**
- * 单项权限状态行。
- */
-@Composable
-fun PermissionItem(name: String, status: PermissionManager.PermissionStatus?) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(text = name, fontSize = 14.sp)
-
-        val (text, color) = when (status) {
-            PermissionManager.PermissionStatus.GRANTED -> "✓ 已授权" to Color(0xFF4CAF50)
-            PermissionManager.PermissionStatus.DENIED -> "✗ 未授权" to Color(0xFFFF5722)
-            PermissionManager.PermissionStatus.NOT_APPLICABLE -> "— 不可用" to Color.Gray
-            null -> "— 未知" to Color.Gray
-        }
-
-        Text(
-            text = text,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Medium,
-            color = color
-        )
     }
 }
 
