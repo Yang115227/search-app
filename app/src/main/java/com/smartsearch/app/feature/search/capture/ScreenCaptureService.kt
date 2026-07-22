@@ -180,8 +180,12 @@ class ScreenCaptureService : Service() {
                     putExtra(EXTRA_SELECTION_RECT, selectionRect)
                 }
             }
-            // 服务已启动，使用 startService 发送 Intent
-            context.startService(intent)
+            // 使用 startForegroundService 确保服务被杀死重建后仍有 5 秒窗口调用 startForeground
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
         }
 
         /**

@@ -328,6 +328,8 @@ object FloatWindowManager {
                 destroyAnswerWindow()
                 this@FloatWindowManager.onAnswerDismissed?.invoke()
                 currentState = FloatWindowState.IDLE
+                // 重新显示悬浮球
+                FloatingWindowService.showAllBalls()
             }
 
             // 点击「选区」按钮 → 重新唤起选区框

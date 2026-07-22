@@ -447,7 +447,12 @@ class HomeActivity : ComponentActivity() {
      * 支持随机练习和顺序练习，选择答案后提交查看正确答案。
      */
     private fun startPractice() {
-        PracticeDialog(this).show()
+        try {
+            PracticeDialog(this).show()
+        } catch (e: Exception) {
+            Log.e(TAG, "启动练习失败: ${e.message}", e)
+            android.widget.Toast.makeText(this, "启动练习失败，请重试", android.widget.Toast.LENGTH_LONG).show()
+        }
     }
 
     // ==================== 错题本 ====================

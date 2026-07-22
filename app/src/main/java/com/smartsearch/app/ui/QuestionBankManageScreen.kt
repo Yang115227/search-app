@@ -91,7 +91,11 @@ fun QuestionBankManageScreen(
     }
 
     LaunchedEffect(Unit) {
-        loadData()
+        try {
+            loadData()
+        } catch (e: Exception) {
+            Log.e("QuestionBankManage", "LaunchedEffect 异常: ${e.message}", e)
+        }
     }
 
     // ==================== 重命名对话框 ====================
