@@ -96,7 +96,8 @@ object FloatWindowManager {
      */
     enum class SearchMode {
         ACCESSIBILITY,
-        SCREEN_CAPTURE
+        SCREEN_CAPTURE,
+        CAMERA
     }
 
     /** 当前搜题模式，默认无障碍 */
@@ -328,8 +329,8 @@ object FloatWindowManager {
                 destroyAnswerWindow()
                 this@FloatWindowManager.onAnswerDismissed?.invoke()
                 currentState = FloatWindowState.IDLE
-                // 重新显示悬浮球
-                FloatingWindowService.showAllBalls()
+                // 重新显示当前模式的悬浮球
+                FloatingWindowService.showBall()
             }
 
             // 点击「选区」按钮 → 重新唤起选区框
@@ -447,11 +448,14 @@ object FloatWindowManager {
         lastSelectionRect = null
         currentSearchMode = SearchMode.ACCESSIBILITY
         currentState = FloatWindowState.IDLE
-        // 重新显示悬浮球
-        FloatingWindowService.showAllBalls()
+        // 重新显示当前模式的悬浮球
+        FloatingWindowService.showBall()
     }
 
     // ==================== 状态查询 ====================
+
+    /** 获取当前搜题模式 */
+    fun getCurrentSearchMode(): SearchMode = currentSearchMode
 
     /** 获取当前悬浮窗状态 */
     fun getCurrentState(): FloatWindowState = currentState

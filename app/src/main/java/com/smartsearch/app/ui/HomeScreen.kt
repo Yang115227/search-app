@@ -268,6 +268,7 @@ class HomeActivity : ComponentActivity() {
                         HomeScreen(
                             onStartAccessibilitySearch = { startAccessibilitySearch() },
                             onStartScreenCaptureSearch = { startScreenCaptureSearch() },
+                            onStartCameraSearch = { startCameraSearch() },
                             onImportQuestions = { openFilePicker() },
                             onOpenQuestionBank = { navController.navigate("question_bank_manage") },
                             onOpenPractice = { startPractice() },
@@ -364,6 +365,9 @@ class HomeActivity : ComponentActivity() {
      * 第 3 步：启动悬浮球服务
      */
     private fun startAccessibilitySearch() {
+        // 切换悬浮球模式为无障碍
+        FloatingWindowService.switchMode(FloatWindowManager.SearchMode.ACCESSIBILITY)
+
         // 第 1 步：悬浮窗权限
         val floatingStatus = PermissionManager.checkFloatingWindow(this)
         if (floatingStatus != PermissionManager.PermissionStatus.GRANTED) {
@@ -404,6 +408,9 @@ class HomeActivity : ComponentActivity() {
      * 第 4 步：授权回调中发送 Intent 给已启动的服务
      */
     private fun startScreenCaptureSearch() {
+        // 切换悬浮球模式为录屏
+        FloatingWindowService.switchMode(FloatWindowManager.SearchMode.SCREEN_CAPTURE)
+
         // 先清理所有悬浮窗状态（防止之前悬浮球残留的 SELECTING 状态）
         FloatWindowManager.destroyAll()
 
@@ -423,6 +430,36 @@ class HomeActivity : ComponentActivity() {
             android.content.Context.MEDIA_PROJECTION_SERVICE
         ) as android.media.projection.MediaProjectionManager
         screenCaptureLauncher.launch(projectionManager.createScreenCaptureIntent())
+    }
+
+    // ==================== 相机扫描搜题 ====================
+
+    /**
+     * 相机扫描搜题启动流程。
+     *
+     * 第 1 步：校验悬浮窗权限
+     * 第 2 步：校验相机权限
+     * 第 3 步：切换悬浮球模式为相机扫描
+     */
+    private fun startCameraSearch() {
+        // 切换悬浮球模式为扫描
+        FloatingWindowService.switchMode(FloatWindowManager.SearchMode.CAMERA)
+
+        // 先清理所有悬浮窗状态
+        FloatWindowManager.destroyAll()
+
+        // 第 1 步：悬浮窗权限
+        val floatingStatus = PermissionManager.checkFloatingWindow(this)
+        if (floatingStatus != PermissionManager.PermissionStatus.GRANTED) {
+            showPermissionGuide("floating_window")
+            startActivity(PermissionManager.getFloatingWindowSettingsIntent(this))
+            return
+        }
+
+        // 第 2 步：启动悬浮球服务
+        startFloatingBallService()
+
+        Toast.makeText(this, "相机扫描搜题功能正在开发中，敬请期待", Toast.LENGTH_SHORT).show()
     }
 
     // ==================== 悬浮球服务 ====================
@@ -560,6 +597,7 @@ class HomeActivity : ComponentActivity() {
 fun HomeScreen(
     onStartAccessibilitySearch: () -> Unit,
     onStartScreenCaptureSearch: () -> Unit,
+    onStartCameraSearch: () -> Unit,
     onImportQuestions: () -> Unit,
     onOpenQuestionBank: () -> Unit,
     onOpenPractice: () -> Unit,
@@ -605,7 +643,7 @@ fun HomeScreen(
         )
         Spacer(modifier = Modifier.height(8.dp))
 
-        // 无障碍搜题按钮（主按钮）
+        // 无障碍搜题按钮（绿色，与悬浮球「无」一致）
         Button(
             onClick = onStartAccessibilitySearch,
             modifier = Modifier
@@ -617,7 +655,7 @@ fun HomeScreen(
             shape = RoundedCornerShape(12.dp)
         ) {
             Text(
-                text = "无障碍搜题（推荐）",
+                text = "🟢 无障碍搜题（推荐）",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold
             )
@@ -625,18 +663,41 @@ fun HomeScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // 录屏搜题按钮
-        OutlinedButton(
+        // 录屏搜题按钮（蓝色，与悬浮球「录」一致）
+        Button(
             onClick = onStartScreenCaptureSearch,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(48.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFF2196F3)
+            ),
             shape = RoundedCornerShape(12.dp)
         ) {
             Text(
-                text = "录屏搜题（OCR 识别）",
+                text = "🔵 录屏搜题（OCR 识别）",
                 fontSize = 14.sp,
-                color = Color(0xFF4CAF50)
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // 相机扫描搜题按钮（橙色，与悬浮球「扫」一致）
+        Button(
+            onClick = onStartCameraSearch,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFFFF9800)
+            ),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Text(
+                text = "🟠 扫描搜题（相机识别）",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold
             )
         }
 

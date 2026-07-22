@@ -27,22 +27,21 @@ import kotlin.math.abs
 import kotlin.math.sqrt
 
 /**
- * 悬浮球前台服务 —— 在屏幕上显示 3 个独立悬浮球，分别对应不同搜题模式。
+ * 悬浮球前台服务 —— 在屏幕上显示当前搜题模式对应的单个悬浮球。
  *
  * # 悬浮球列表
- * | 悬浮球      | 颜色       | 图标 | 点击行为                  |
- * |-------------|-----------|------|--------------------------|
- * | 无障碍搜题   | 绿色 #4CAF50 | 无   | 弹出选区框 → 进入连续搜题 |
- * | 录屏搜题     | 蓝色 #2196F3 | 录   | 启动录屏授权 → 进入连续搜题 |
- * | 扫描搜题     | 橙色 #FF9800 | 扫   | 打开相机扫描               |
+ * | 模式         | 显示文字 | 背景色       | 点击行为                  |
+ * |-------------|---------|-------------|--------------------------|
+ * | 无障碍搜题   | 无      | 绿色 #4CAF50 | 弹出选区框 → 进入连续搜题 |
+ * | 录屏搜题     | 录      | 蓝色 #2196F3 | 启动录屏授权 → 进入连续搜题 |
+ * | 扫描搜题     | 扫      | 橙色 #FF9800 | 打开相机扫描               |
  *
  * # 交互行为
+ * - 同一时间只显示一个悬浮球，对应当前启用的搜题模式
+ * - 切换模式时自动更换悬浮球
  * - 单击：直接触发对应搜题模式
  * - 长按：关闭悬浮窗（停止服务）
  * - 拖拽：移动悬浮球位置，松手自动吸附左右边缘
- *
- * # 前台服务通知
- * Android 8+ 必须创建通知渠道并显示前台通知，否则 Service 会被系统杀死。
  */
 class FloatingWindowService : Service() {
 
@@ -54,12 +53,27 @@ class FloatingWindowService : Service() {
         @Volatile
         private var serviceInstance: FloatingWindowService? = null
 
+        /** 当前搜题模式，默认无障碍 */
+        @Volatile
+        private var currentMode: FloatWindowManager.SearchMode = FloatWindowManager.SearchMode.ACCESSIBILITY
+
         /**
-         * 重新显示悬浮球（从搜索模式退出后调用）。
+         * 切换搜题模式并更新悬浮球。
+         * 从页面主按钮调用（无需服务实例引用）。
          */
-        fun showAllBalls() {
+        fun switchMode(mode: FloatWindowManager.SearchMode) {
+            currentMode = mode
             serviceInstance?.mainHandler?.post {
-                serviceInstance?.attachAllBalls()
+                serviceInstance?.attachBallForMode(mode)
+            }
+        }
+
+        /**
+         * 重新显示当前模式的悬浮球（从搜索模式退出后调用）。
+         */
+        fun showBall() {
+            serviceInstance?.mainHandler?.post {
+                serviceInstance?.attachBallForMode(currentMode)
             }
         }
 
@@ -92,10 +106,34 @@ class FloatingWindowService : Service() {
         val onClick: () -> Unit     // 点击回调
     )
 
+    /** 根据搜题模式获取悬浮球配置 */
+    private fun getConfigForMode(mode: FloatWindowManager.SearchMode): FloatBallConfig {
+        return when (mode) {
+            FloatWindowManager.SearchMode.ACCESSIBILITY -> FloatBallConfig(
+                label = "无",
+                color = Color.parseColor("#4CAF50"),
+                defaultYRatio = 0.35f,
+                onClick = { triggerAccessibilitySearch() }
+            )
+            FloatWindowManager.SearchMode.SCREEN_CAPTURE -> FloatBallConfig(
+                label = "录",
+                color = Color.parseColor("#2196F3"),
+                defaultYRatio = 0.35f,
+                onClick = { startScreenCaptureMode() }
+            )
+            FloatWindowManager.SearchMode.CAMERA -> FloatBallConfig(
+                label = "扫",
+                color = Color.parseColor("#FF9800"),
+                defaultYRatio = 0.35f,
+                onClick = { triggerCameraSearch() }
+            )
+        }
+    }
+
     // ==================== 窗口管理 ====================
 
     private var windowManager: WindowManager? = null
-    private val floatingBalls = mutableListOf<FloatingBallView>()
+    private var currentBall: FloatingBallView? = null
 
     private var density = 1f
     private var ballSizePx = 0
@@ -135,7 +173,7 @@ class FloatingWindowService : Service() {
         if (PermissionManager.checkFloatingWindow(this) != PermissionManager.PermissionStatus.GRANTED) {
             notifyPermissionRequired()
         } else {
-            attachAllBalls()
+            attachBallForMode(currentMode)
         }
 
         @Suppress("DEPRECATION")
@@ -143,7 +181,7 @@ class FloatingWindowService : Service() {
     }
 
     override fun onDestroy() {
-        detachAllBalls()
+        detachCurrentBall()
         serviceInstance = null
         super.onDestroy()
     }
@@ -214,48 +252,28 @@ class FloatingWindowService : Service() {
     // ==================== 悬浮球管理 ====================
 
     /**
-     * 创建并添加 3 个独立悬浮球到 WindowManager。
+     * 为指定模式创建并显示悬浮球。
+     * 先移除当前球，再创建新模式对应的球。
      */
-    private fun attachAllBalls() {
-        if (floatingBalls.isNotEmpty()) return
+    private fun attachBallForMode(mode: FloatWindowManager.SearchMode) {
+        // 先移除当前球
+        detachCurrentBall()
 
-        val configs = listOf(
-            FloatBallConfig(
-                label = "无",
-                color = Color.parseColor("#4CAF50"),
-                defaultYRatio = 0.25f,
-                onClick = { triggerAccessibilitySearch() }
-            ),
-            FloatBallConfig(
-                label = "录",
-                color = Color.parseColor("#2196F3"),
-                defaultYRatio = 0.45f,
-                onClick = { startScreenCaptureMode() }
-            ),
-            FloatBallConfig(
-                label = "扫",
-                color = Color.parseColor("#FF9800"),
-                defaultYRatio = 0.65f,
-                onClick = { triggerCameraSearch() }
-            )
-        )
-
-        for (config in configs) {
-            val ball = FloatingBallView(this, config)
-            val params = createBallParams(config.defaultYRatio)
-            ball.ballParams = params
-            try {
-                windowManager?.addView(ball, params)
-                floatingBalls.add(ball)
-            } catch (e: SecurityException) {
-                Log.e(TAG, "悬浮窗权限未授予", e)
-            }
+        val config = getConfigForMode(mode)
+        val ball = FloatingBallView(this, config)
+        val params = createBallParams(config.defaultYRatio)
+        ball.ballParams = params
+        try {
+            windowManager?.addView(ball, params)
+            currentBall = ball
+        } catch (e: SecurityException) {
+            Log.e(TAG, "悬浮窗权限未授予", e)
         }
     }
 
     /**
      * 创建单个悬浮球的 WindowManager LayoutParams。
-     * 默认位置：屏幕右侧，Y 坐标按比例分配。
+     * 默认位置：屏幕右侧，Y 坐标居中偏上。
      */
     private fun createBallParams(yRatio: Float): WindowManager.LayoutParams {
         return WindowManager.LayoutParams().apply {
@@ -280,31 +298,24 @@ class FloatingWindowService : Service() {
     }
 
     /**
-     * 从 WindowManager 移除所有悬浮球。
+     * 从 WindowManager 移除当前悬浮球。
      */
-    private fun detachAllBalls() {
-        for (ball in floatingBalls) {
+    private fun detachCurrentBall() {
+        currentBall?.let { ball ->
             try {
                 windowManager?.removeView(ball)
             } catch (e: IllegalArgumentException) {
                 // 已移除
             }
         }
-        floatingBalls.clear()
+        currentBall = null
     }
 
     /**
-     * 隐藏所有悬浮球（进入搜索模式前调用）。
-     * 区别于 detachAllBalls，仅移除 View 不清除列表，以便后续重新显示。
+     * 隐藏当前悬浮球（进入搜索模式前调用）。
      */
-    private fun hideAllBalls() {
-        for (ball in floatingBalls) {
-            try {
-                windowManager?.removeView(ball)
-            } catch (e: IllegalArgumentException) {
-                // 已移除
-            }
-        }
+    private fun hideCurrentBall() {
+        detachCurrentBall()
     }
 
     // ==================== 悬浮球视图 ====================
@@ -404,7 +415,7 @@ class FloatingWindowService : Service() {
                     if (isDragging && ballParams != null) {
                         ballParams!!.x = (windowStartX + dx).toInt()
                         ballParams!!.y = (windowStartY + dy).toInt()
-                        updateBallPosition(this, ballParams!!)
+                        updateBallPosition(ballParams!!)
                     }
                     return true
                 }
@@ -442,18 +453,20 @@ class FloatingWindowService : Service() {
     }
 
     /**
-     * 更新单个悬浮球位置。
+     * 更新悬浮球位置。
      */
-    private fun updateBallPosition(ball: View, params: WindowManager.LayoutParams) {
-        try {
-            windowManager?.updateViewLayout(ball, params)
-        } catch (e: IllegalArgumentException) {
-            // 视图已被移除
+    private fun updateBallPosition(params: WindowManager.LayoutParams) {
+        currentBall?.let { ball ->
+            try {
+                windowManager?.updateViewLayout(ball, params)
+            } catch (e: IllegalArgumentException) {
+                // 视图已被移除
+            }
         }
     }
 
     /**
-     * 拖拽结束后将单个悬浮球吸附到屏幕左边缘或右边缘。
+     * 拖拽结束后将悬浮球吸附到屏幕左边缘或右边缘。
      */
     private fun snapToEdge(params: WindowManager.LayoutParams?) {
         val p = params ?: return
@@ -464,17 +477,19 @@ class FloatingWindowService : Service() {
         p.x = targetX
         p.y = clampedY
 
-        try {
-            windowManager?.updateViewLayout(floatingBalls.find { it.ballParams == params }, p)
-        } catch (e: IllegalArgumentException) {
-            // 忽略
+        currentBall?.let { ball ->
+            try {
+                windowManager?.updateViewLayout(ball, p)
+            } catch (e: IllegalArgumentException) {
+                // 忽略
+            }
         }
     }
 
     // ==================== 搜题触发入口 ====================
 
     private fun triggerAccessibilitySearch() {
-        hideAllBalls()
+        hideCurrentBall()
         if (PermissionManager.checkFloatingWindow(this) != PermissionManager.PermissionStatus.GRANTED) {
             notifyPermissionRequired()
             return
@@ -499,21 +514,51 @@ class FloatingWindowService : Service() {
     }
 
     private fun startScreenCaptureMode() {
-        hideAllBalls()
+        hideCurrentBall()
         if (PermissionManager.checkFloatingWindow(this) != PermissionManager.PermissionStatus.GRANTED) {
             notifyPermissionRequired()
             return
         }
-        val intent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
-            putExtra(EXTRA_START_SCREEN_CAPTURE, true)
-        }
-        if (intent != null) {
-            startActivity(intent)
+
+        // 启动 Activity 触发录屏授权流程
+        try {
+            val intent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                putExtra(EXTRA_START_SCREEN_CAPTURE, true)
+            }
+            if (intent != null) {
+                startActivity(intent)
+            } else {
+                Log.w(TAG, "无法获取启动 Intent")
+                showScreenCaptureError("无法启动应用，请手动打开应用后重试")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "启动录屏搜题失败: ${e.message}", e)
+            showScreenCaptureError("启动录屏搜题失败，请手动打开应用后重试")
         }
     }
 
+    /**
+     * 录屏模式启动失败时显示提示。
+     */
+    private fun showScreenCaptureError(message: String) {
+        FloatWindowManager.showAnswerWindow(
+            this,
+            answer = "录屏启动失败",
+            explanation = message + "\n\n" +
+                    "请尝试：\n" +
+                    "1. 手动打开应用\n" +
+                    "2. 点击页面「录屏搜题」按钮\n" +
+                    "3. 授权录屏权限",
+            onDismissed = {
+                // 退出后重新显示悬浮球
+                FloatWindowManager.destroyAll()
+            }
+        )
+    }
+
     private fun triggerCameraSearch() {
+        hideCurrentBall()
         if (PermissionManager.checkFloatingWindow(this) != PermissionManager.PermissionStatus.GRANTED) {
             notifyPermissionRequired()
             return
