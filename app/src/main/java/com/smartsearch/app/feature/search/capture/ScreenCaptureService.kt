@@ -23,6 +23,7 @@ import android.os.HandlerThread
 import android.os.IBinder
 import android.util.Log
 import com.smartsearch.app.core.permission.PermissionManager
+import com.smartsearch.app.core.service.FloatingWindowService
 import com.smartsearch.app.core.service.FloatWindowManager
 import com.smartsearch.app.feature.search.accessibility.AccessibilitySearchService
 import java.nio.ByteBuffer
@@ -483,57 +484,73 @@ class ScreenCaptureService : Service() {
             // 标记录屏权限已授予
             PermissionManager.markScreenCaptureGranted(this)
 
+            // 确保 OCR 引擎已初始化
+            if (!PaddleOCREngine.isReady()) {
+                PaddleOCREngine.init(this)
+                if (!PaddleOCREngine.isReady()) {
+                    Log.e(TAG, "PaddleOCR 引擎初始化失败")
+                    FloatWindowManager.showAnswerWindow(
+                        this,
+                        answer = "OCR 引擎初始化失败",
+                        explanation = "无法启动 OCR 识别引擎，请重启应用后重试。"
+                    )
+                    switchToAccessibilityMode()
+                    stopSelf()
+                    return
+                }
+            }
+
             // 创建 MediaProjection
             mediaProjection = mediaProjectionManager?.getMediaProjection(
                 Activity.RESULT_OK,
                 projectionIntent
             )
 
-        if (mediaProjection == null) {
-            Log.e(TAG, "无法获取 MediaProjection")
-            switchToAccessibilityMode()
-            stopSelf()
-            return
-        }
-
-        // 注册 MediaProjection 停止回调
-        mediaProjection?.registerCallback(object : MediaProjection.Callback() {
-            override fun onStop() {
-                Log.w(TAG, "MediaProjection 已停止（权限被回收或页面拦截）")
-                mainHandler.post {
-                    switchToAccessibilityMode()
-                    stopSelf()
-                }
+            if (mediaProjection == null) {
+                Log.e(TAG, "无法获取 MediaProjection")
+                switchToAccessibilityMode()
+                stopSelf()
+                return
             }
-        }, mainHandler)
 
-        // 创建 ImageReader（用于接收屏幕帧）
-        imageReader = ImageReader.newInstance(
-            screenWidth,
-            screenHeight,
-            PixelFormat.RGBA_8888,
-            2 // 缓冲队列大小
-        ).apply {
-            setOnImageAvailableListener({ reader ->
-                onImageAvailable(reader)
-            }, backgroundHandler)
-        }
+            // 注册 MediaProjection 停止回调
+            mediaProjection?.registerCallback(object : MediaProjection.Callback() {
+                override fun onStop() {
+                    Log.w(TAG, "MediaProjection 已停止（权限被回收或页面拦截）")
+                    mainHandler.post {
+                        switchToAccessibilityMode()
+                        stopSelf()
+                    }
+                }
+            }, mainHandler)
 
-        // 创建 VirtualDisplay
-        virtualDisplay = mediaProjection?.createVirtualDisplay(
-            "ScreenCapture",
-            screenWidth,
-            screenHeight,
-            screenDensity,
-            DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-            imageReader?.surface,
-            null,
-            backgroundHandler
-        )
+            // 创建 ImageReader（用于接收屏幕帧）
+            imageReader = ImageReader.newInstance(
+                screenWidth,
+                screenHeight,
+                PixelFormat.RGBA_8888,
+                2 // 缓冲队列大小
+            ).apply {
+                setOnImageAvailableListener({ reader ->
+                    onImageAvailable(reader)
+                }, backgroundHandler)
+            }
 
-        isCapturing = true
-        blackFrameCount = 0
-        Log.d(TAG, "录屏采集已启动")
+            // 创建 VirtualDisplay
+            virtualDisplay = mediaProjection?.createVirtualDisplay(
+                "ScreenCapture",
+                screenWidth,
+                screenHeight,
+                screenDensity,
+                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+                imageReader?.surface,
+                null,
+                backgroundHandler
+            )
+
+            isCapturing = true
+            blackFrameCount = 0
+            Log.d(TAG, "录屏采集已启动")
         } catch (e: Exception) {
             Log.e(TAG, "startCapture 异常: ${e.message}", e)
             // 确保前台通知已发出
@@ -817,24 +834,32 @@ class ScreenCaptureService : Service() {
      * 3. MediaProjection 启动失败
      */
     private fun switchToAccessibilityMode() {
-        Log.d(TAG, "切换到无障碍模式")
+        try {
+            Log.d(TAG, "切换到无障碍模式")
 
-        // 记录切换原因，通知用户
-        val accessibilityService = AccessibilitySearchService.getInstance()
-        if (accessibilityService != null) {
-            // 无障碍服务仍在运行 → 直接切换
-            FloatWindowManager.showSelectOverlay(this) { rect ->
-                accessibilityService.setSelectionRect(rect)
+            // 记录切换原因，通知用户
+            val accessibilityService = AccessibilitySearchService.getInstance()
+            if (accessibilityService != null) {
+                // 无障碍服务仍在运行 → 直接切换
+                FloatWindowManager.showSelectOverlay(this) { rect ->
+                    accessibilityService.setSelectionRect(rect)
+                }
+            } else {
+                // 无障碍服务未运行 → 显示悬浮球，让用户手动开启无障碍
+                FloatWindowManager.showAnswerWindow(
+                    this,
+                    answer = "录屏模式已停止",
+                    explanation = "原因：录屏权限被回收或页面不支持截屏。\n\n" +
+                            "请开启无障碍服务后继续使用搜题功能。\n" +
+                            "设置路径：设置 → 无障碍 → 智能搜题"
+                )
             }
-        } else {
-            // 无障碍服务未运行 → 提示用户开启
-            FloatWindowManager.showAnswerWindow(
-                this,
-                answer = "录屏模式已停止",
-                explanation = "原因：录屏权限被回收或页面不支持截屏。\n\n" +
-                        "请开启无障碍服务后继续使用搜题功能。\n" +
-                        "设置路径：设置 → 无障碍 → 智能搜题"
-            )
+        } catch (e: Exception) {
+            Log.e(TAG, "切换无障碍模式异常: ${e.message}", e)
+            // 降级：显示悬浮球
+            try {
+                FloatingWindowService.showBall()
+            } catch (_: Exception) { }
         }
     }
 }

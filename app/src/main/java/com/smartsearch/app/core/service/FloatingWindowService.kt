@@ -80,6 +80,9 @@ class FloatingWindowService : Service() {
         /** Intent Extra: 启动录屏搜题 */
         const val EXTRA_START_SCREEN_CAPTURE = "start_screen_capture"
 
+        /** Intent Extra: 启动相机扫描搜题 */
+        const val EXTRA_START_CAMERA_SEARCH = "start_camera_search"
+
         /** 悬浮球默认边长 dp */
         private const val BALL_SIZE_DP = 52f
 
@@ -563,12 +566,24 @@ class FloatingWindowService : Service() {
             notifyPermissionRequired()
             return
         }
-        Log.d(TAG, "相机扫描搜题 — 待实现")
-        FloatWindowManager.showAnswerWindow(
-            this,
-            answer = "相机扫描",
-            explanation = "相机扫描搜题功能正在开发中，敬请期待。"
-        )
+
+        // 启动相机扫描 Activity
+        try {
+            val intent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                putExtra(EXTRA_START_CAMERA_SEARCH, true)
+            }
+            if (intent != null) {
+                startActivity(intent)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "启动相机扫描失败: ${e.message}", e)
+            FloatWindowManager.showAnswerWindow(
+                this,
+                answer = "相机扫描启动失败",
+                explanation = "无法启动相机扫描，请手动打开应用后点击「扫描搜题」按钮。"
+            )
+        }
     }
 }
 

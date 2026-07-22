@@ -1,8 +1,10 @@
 package com.smartsearch.app.ui
 
+import android.Manifest
 import android.app.Activity
 import android.content.DialogInterface
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -28,8 +30,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import kotlin.properties.Delegates
 import com.smartsearch.app.core.permission.PermissionManager
 import com.smartsearch.app.core.service.FloatingWindowService
 import com.smartsearch.app.core.service.FloatWindowManager
@@ -123,8 +127,23 @@ class HomeActivity : ComponentActivity() {
         }
     }
 
+    /** 相机权限请求 */
+    private val cameraPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            // 权限已授予 → 启动相机扫描
+            launchCameraSearch()
+        } else {
+            Toast.makeText(this, "相机权限被拒绝，无法使用扫描搜题", Toast.LENGTH_LONG).show()
+        }
+    }
+
     /** 当前正在等待导入的 Uri（分类选择对话框选定后使用） */
     private var pendingImportUri: Uri? = null
+
+    /** 题库管理页面刷新键，导入完成后自增触发数据重载 */
+    private var importRefreshKey by Delegates.notNull<Int>()
 
     /**
      * 显示分类选择对话框，让用户选择或输入学科分类。
@@ -218,6 +237,8 @@ class HomeActivity : ComponentActivity() {
                                 if (subject.isNotBlank()) "（$subject）" else "",
                         Toast.LENGTH_LONG
                     ).show()
+                    // 通知题库管理页面刷新数据
+                    importRefreshKey++
                 }
                 is ExcelImporter.ImportResult.Error -> {
                     Toast.makeText(
@@ -233,6 +254,7 @@ class HomeActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleScreenCaptureIntent(intent)
+        handleCameraSearchIntent(intent)
     }
 
     /**
@@ -245,17 +267,28 @@ class HomeActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * 处理从悬浮球服务发起的相机扫描搜题请求。
+     */
+    private fun handleCameraSearchIntent(intent: Intent?) {
+        if (intent?.getBooleanExtra(FloatingWindowService.EXTRA_START_CAMERA_SEARCH, false) == true) {
+            startCameraSearch()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // 处理从悬浮球发起的录屏搜题请求
+        // 处理从悬浮球发起的录屏/相机搜题请求
         handleScreenCaptureIntent(intent)
+        handleCameraSearchIntent(intent)
 
         // 初始化悬浮窗管理器
         FloatWindowManager.init(this)
 
         setContent {
             val navController = rememberNavController()
+            importRefreshKey = 0
 
             MaterialTheme(
                 colorScheme = lightColorScheme()
@@ -290,7 +323,8 @@ class HomeActivity : ComponentActivity() {
                     composable("question_bank_manage") {
                         QuestionBankManageScreen(
                             onBack = { navController.popBackStack() },
-                            onImportClick = { openFilePicker() }
+                            onImportClick = { openFilePicker() },
+                            refreshKey = importRefreshKey
                         )
                     }
                     composable(
@@ -400,6 +434,7 @@ class HomeActivity : ComponentActivity() {
      * 第 1 步：校验悬浮窗权限
      * 第 2 步：校验相机权限
      * 第 3 步：切换悬浮球模式为相机扫描
+     * 第 4 步：启动相机扫描 Activity
      */
     private fun startCameraSearch() {
         // 切换悬浮球模式为扫描
@@ -408,7 +443,17 @@ class HomeActivity : ComponentActivity() {
         // 先清理所有悬浮窗状态
         FloatWindowManager.destroyAll()
 
-        // 第 1 步：悬浮窗权限
+        // 第 1 步：相机权限
+        if (ContextCompat.checkSelfPermission(
+                this, Manifest.permission.CAMERA
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            showPermissionGuide("camera")
+            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+            return
+        }
+
+        // 第 2 步：悬浮窗权限
         val floatingStatus = PermissionManager.checkFloatingWindow(this)
         if (floatingStatus != PermissionManager.PermissionStatus.GRANTED) {
             showPermissionGuide("floating_window")
@@ -416,10 +461,24 @@ class HomeActivity : ComponentActivity() {
             return
         }
 
-        // 第 2 步：启动悬浮球服务
+        // 第 3 步：启动悬浮球服务
         startFloatingBallService()
 
-        Toast.makeText(this, "相机扫描搜题功能正在开发中，敬请期待", Toast.LENGTH_SHORT).show()
+        // 第 4 步：启动相机扫描 Activity
+        launchCameraSearch()
+    }
+
+    /**
+     * 启动相机扫描 Activity。
+     */
+    private fun launchCameraSearch() {
+        try {
+            val intent = Intent(this, CameraSearchActivity::class.java)
+            startActivity(intent)
+        } catch (e: Exception) {
+            Log.e(TAG, "启动相机扫描失败: ${e.message}", e)
+            Toast.makeText(this, "启动相机扫描失败: ${e.message}", Toast.LENGTH_LONG).show()
+        }
     }
 
     // ==================== 悬浮球服务 ====================

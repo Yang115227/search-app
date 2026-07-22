@@ -1,6 +1,7 @@
 package com.smartsearch.app.ui
 
 import android.util.Log
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -47,6 +48,7 @@ fun QuestionBankListScreen(
     var selectedSubject by remember { mutableStateOf("") }
     var selectedMode by remember { mutableStateOf("SEQUENTIAL") }
     var totalCount by remember { mutableIntStateOf(0) }
+    var isCheckingQuestions by remember { mutableStateOf(false) }
 
     // 加载题库数据
     LaunchedEffect(Unit) {
@@ -132,22 +134,65 @@ fun QuestionBankListScreen(
                     // 开始练习按钮
                     Button(
                         onClick = {
-                            onStartPractice(selectedSubject, selectedMode)
+                            scope.launch {
+                                isCheckingQuestions = true
+                                try {
+                                    val db = QuizDatabase.getInstance(context)
+                                    val count = withContext(Dispatchers.IO) {
+                                        try {
+                                            if (selectedSubject.isEmpty()) {
+                                                db.questionDao().getCount()
+                                            } else {
+                                                db.questionDao().getCountBySubject(selectedSubject)
+                                            }
+                                        } catch (e: Exception) {
+                                            Log.e("QuestionBankList", "查询题目数量异常: ${e.message}", e)
+                                            -1
+                                        }
+                                    }
+                                    if (count == 0) {
+                                        Toast.makeText(
+                                            context,
+                                            if (selectedSubject.isEmpty()) "题库中暂无题目，请先导入" else "该学科暂无题目，请先导入",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    } else if (count > 0) {
+                                        onStartPractice(selectedSubject, selectedMode)
+                                    }
+                                } catch (e: Exception) {
+                                    Log.e("QuestionBankList", "获取数据库实例异常: ${e.message}", e)
+                                    Toast.makeText(
+                                        context,
+                                        "数据库访问异常，请重试",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                } finally {
+                                    isCheckingQuestions = false
+                                }
+                            }
                         },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(48.dp),
-                        enabled = selectedSubject.isNotBlank(),
+                        enabled = selectedSubject.isNotBlank() && !isCheckingQuestions,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Color(0xFF4CAF50)
                         ),
                         shape = RoundedCornerShape(12.dp)
                     ) {
-                        Text(
-                            text = "开始练习",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        if (isCheckingQuestions) {
+                            Text(
+                                text = "检查中...",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        } else {
+                            Text(
+                                text = "开始练习",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
             }

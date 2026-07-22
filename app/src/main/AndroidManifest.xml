@@ -116,6 +116,13 @@
             android:exported="false"
             android:theme="@style/Theme.SmartSearch" />
 
+        <!-- 相机扫描搜题页 -->
+        <activity
+            android:name=".ui.CameraSearchActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.SmartSearch" />
+
         <!-- ======================================== -->
         <!-- Service 注册                               -->
         <!-- ======================================== -->

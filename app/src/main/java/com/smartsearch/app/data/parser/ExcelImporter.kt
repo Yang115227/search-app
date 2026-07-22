@@ -103,7 +103,7 @@ object ExcelImporter {
     suspend fun importFromUri(context: Context, uri: Uri, defaultSubject: String = ""): ImportResult = withContext(Dispatchers.IO) {
         try {
             val inputStream: InputStream = context.contentResolver.openInputStream(uri)
-                ?: return@withContext ImportResult.Error("无法打开文件")
+                ?: return@withContext ImportResult.Error("无法打开文件，请确保文件未被其他程序占用")
 
             val result = parseAndImport(inputStream, context, defaultSubject)
             inputStream.close()
@@ -128,12 +128,12 @@ object ExcelImporter {
         val workbook: Workbook = try {
             WorkbookFactory.create(inputStream)
         } catch (e: Exception) {
-            return ImportResult.Error("文件格式不支持，请使用 .xlsx 或 .xls 格式")
+            return ImportResult.Error("文件格式不支持，请使用 .xlsx 或 .xls 格式的 Excel 文件")
         }
 
         workbook.use { wb ->
             if (wb.numberOfSheets == 0) {
-                return ImportResult.Error("Excel 文件中没有工作表")
+                return ImportResult.Error("Excel 文件中没有工作表，请检查文件内容")
             }
 
             val sheet = wb.getSheetAt(0) // 默认读取第一个工作表
@@ -141,6 +141,26 @@ object ExcelImporter {
 
             if (rowCount <= 0) {
                 return ImportResult.Error("工作表为空，没有数据行")
+            }
+
+            // 验证 Excel 格式：检查第一行是否至少有 2 列
+            val firstRow = sheet.getRow(0)
+            if (firstRow == null || firstRow.lastCellNum.toInt() < 2) {
+                return ImportResult.Error("Excel 文件格式错误：至少需要包含「题干」和「答案」两列，请检查文件内容")
+            }
+
+            // 检查第一行是否包含可识别的表头
+            val headerTexts = mutableListOf<String>()
+            for (cellIndex in 0 until firstRow.lastCellNum.coerceAtMost(20)) {
+                val cell = firstRow.getCell(cellIndex) ?: continue
+                val text = getCellString(cell).trim().lowercase()
+                if (text.isNotBlank()) {
+                    headerTexts.add(text)
+                }
+            }
+            val hasRecognizableHeader = headerTexts.any { COLUMN_ALIASES.containsKey(it) }
+            if (!hasRecognizableHeader) {
+                Log.w(TAG, "第一行未识别到已知表头，将使用固定列序模式（A=题干, B=答案）")
             }
 
             // 限制最大行数
@@ -152,6 +172,15 @@ object ExcelImporter {
             // 解析表头
             val headerRow = sheet.getRow(0)
             val columnMapping = parseHeader(headerRow)
+
+            // 检查表头映射是否至少包含「题干」和「答案」两列
+            if (columnMapping.isNotEmpty()) {
+                val hasQuestion = columnMapping.values.contains(ColumnType.QUESTION)
+                val hasAnswer = columnMapping.values.contains(ColumnType.ANSWER)
+                if (!hasQuestion || !hasAnswer) {
+                    return ImportResult.Error("Excel 表头至少需要包含「题干」和「答案」两列，请检查表头命名是否正确")
+                }
+            }
 
             // 确定数据起始行（有表头从第 2 行开始，无表头从第 1 行开始）
             val dataStartRow = if (columnMapping.isNotEmpty()) 1 else 0
@@ -169,7 +198,7 @@ object ExcelImporter {
             }
 
             if (questions.isEmpty()) {
-                return ImportResult.Error("未解析到有效题目数据，请检查 Excel 格式")
+                return ImportResult.Error("未解析到有效题目数据，请确保 Excel 包含「题干」和「答案」两列")
             }
 
             // 批量写入数据库
@@ -239,40 +268,41 @@ object ExcelImporter {
         rowIndex: Int,
         defaultSubject: String = ""
     ): QuestionEntity? {
-        val question: String
-        val answer: String
-        var explanation = ""
-        var options = ""
-        var subject = ""
+        try {
+            val question: String
+            val answer: String
+            var explanation = ""
+            var options = ""
+            var subject = ""
 
-        if (columnMapping.isNotEmpty()) {
-            // 模式 1：按表头映射读取
-            question = getCellValueByType(row, columnMapping, ColumnType.QUESTION)
-            answer = getCellValueByType(row, columnMapping, ColumnType.ANSWER)
-            explanation = getCellValueByType(row, columnMapping, ColumnType.EXPLANATION)
-            options = getCellValueByType(row, columnMapping, ColumnType.OPTIONS)
-            subject = getCellValueByType(row, columnMapping, ColumnType.SUBJECT)
-        } else {
-            // 模式 2：固定列序 A=题干, B=答案, C=解析, D=选项, E=学科
-            question = getCellString(row.getCell(0))
-            answer = getCellString(row.getCell(1))
-            explanation = getCellString(row.getCell(2))
-            options = getCellString(row.getCell(3))
-            subject = getCellString(row.getCell(4))
-        }
+            if (columnMapping.isNotEmpty()) {
+                // 模式 1：按表头映射读取
+                question = getCellValueByType(row, columnMapping, ColumnType.QUESTION)
+                answer = getCellValueByType(row, columnMapping, ColumnType.ANSWER)
+                explanation = getCellValueByType(row, columnMapping, ColumnType.EXPLANATION)
+                options = getCellValueByType(row, columnMapping, ColumnType.OPTIONS)
+                subject = getCellValueByType(row, columnMapping, ColumnType.SUBJECT)
+            } else {
+                // 模式 2：固定列序 A=题干, B=答案, C=解析, D=选项, E=学科
+                question = getCellString(row.getCell(0))
+                answer = getCellString(row.getCell(1))
+                explanation = getCellString(row.getCell(2))
+                options = getCellString(row.getCell(3))
+                subject = getCellString(row.getCell(4))
+            }
 
-        // 如果用户指定了默认学科，覆盖文件中每道题的学科
-        if (defaultSubject.isNotBlank()) {
-            subject = defaultSubject
-        }
+            // 如果用户指定了默认学科，覆盖文件中每道题的学科
+            if (defaultSubject.isNotBlank()) {
+                subject = defaultSubject
+            }
 
-        // 题干和答案不能为空
-        if (question.isBlank() || answer.isBlank()) {
-            Log.w(TAG, "第 ${rowIndex + 1} 行题干或答案为空，跳过")
-            return null
-        }
+            // 题干和答案不能为空
+            if (question.isBlank() || answer.isBlank()) {
+                Log.w(TAG, "第 ${rowIndex + 1} 行题干或答案为空，跳过")
+                return null
+            }
 
-        return QuestionEntity(
+            return QuestionEntity(
             question = question.trim(),
             answer = answer.trim(),
             explanation = explanation.trim(),
@@ -281,6 +311,10 @@ object ExcelImporter {
             source = "Excel导入",
             importedAt = System.currentTimeMillis()
         )
+        } catch (e: Exception) {
+            Log.w(TAG, "Excel 文件格式错误：第 ${rowIndex + 1} 行数据格式异常，请检查", e)
+            return null
+        }
     }
 
     /**

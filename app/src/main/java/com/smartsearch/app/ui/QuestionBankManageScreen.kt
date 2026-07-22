@@ -2,7 +2,6 @@ package com.smartsearch.app.ui
 
 import android.util.Log
 import android.widget.Toast
-import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -20,7 +19,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.smartsearch.app.data.local.QuizDatabase
@@ -29,13 +27,15 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * 题库管理页面 —— 按学科管理题库，支持删除和重命名。
+ * 题库管理页面 —— 按学科管理题库，支持多选、批量删除、重命名和导入。
  *
  * 功能：
  * - 顶部导航：左上角返回箭头，页面标题「题库管理」
- * - 题库条目列表：每条展示名称、总题数量
- * - 单选选中机制：选中条目蓝色边框高亮，同一时间只能选择一套题库
- * - 底部操作栏：删除（选中时）、重命名（选中时）
+ * - 题库条目列表：每条展示名称、总题数量，复选框多选
+ * - 底部操作栏：导入Excel、重命名（单选时）、删除（单选时）、批量删除（选中≥1项时）
+ * - 重命名和删除操作均有确认对话框
+ * - 所有数据库操作均包含异常捕获与用户提示
+ * - 导入完成后通过 refreshTrigger 自动刷新列表
  */
 
 /** 题库条目数据类 */
@@ -48,22 +48,33 @@ private data class SubjectManageItem(
 @Composable
 fun QuestionBankManageScreen(
     onBack: () -> Unit,
-    onImportClick: (() -> Unit)? = null
+    onImportClick: (() -> Unit)? = null,
+    /** 由父页面传入的刷新键，当父页面完成导入操作后自增此值以触发数据重载 */
+    refreshKey: Int = 0
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
     // 题库列表数据
     var subjects by remember { mutableStateOf<List<SubjectManageItem>>(emptyList()) }
-    var selectedSubject by remember { mutableStateOf("") }
+    var selectedSubjects by remember { mutableStateOf<Set<String>>(emptySet()) }
     var totalCount by remember { mutableIntStateOf(0) }
     var isLoading by remember { mutableStateOf(true) }
+    var refreshTrigger by remember { mutableIntStateOf(0) }
 
     // 重命名对话框
     var showRenameDialog by remember { mutableStateOf(false) }
-    var renameText by remember { mutableStateOf("") }
 
-    // 加载数据
+    // 删除确认对话框
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+    var isBatchDelete by remember { mutableStateOf(false) }
+
+    // ==================== 数据加载 ====================
+
+    /**
+     * 加载题库数据，包含异常捕获。
+     * 加载完成后自动清理已不存在的选中项。
+     */
     fun loadData() {
         scope.launch {
             isLoading = true
@@ -79,28 +90,30 @@ fun QuestionBankManageScreen(
                 }
                 subjects = items
                 totalCount = allCount
-                if (selectedSubject.isNotEmpty() && items.none { it.subject == selectedSubject }) {
-                    selectedSubject = ""
-                }
+                // 清理已不存在的选中项
+                val validSubjects = items.map { it.subject }.toSet()
+                selectedSubjects = selectedSubjects.filter { it in validSubjects }.toSet()
                 isLoading = false
             } catch (e: Exception) {
                 Log.e("QuestionBankManage", "加载题库数据异常: ${e.message}", e)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "加载题库数据失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
                 isLoading = false
             }
         }
     }
 
-    LaunchedEffect(Unit) {
-        try {
-            loadData()
-        } catch (e: Exception) {
-            Log.e("QuestionBankManage", "LaunchedEffect 异常: ${e.message}", e)
-        }
+    // refreshTrigger 或 refreshKey 变化时重新加载数据（覆盖初始加载和操作后的刷新）
+    LaunchedEffect(refreshTrigger, refreshKey) {
+        loadData()
     }
 
     // ==================== 重命名对话框 ====================
+
     if (showRenameDialog) {
-        var inputText by remember(selectedSubject) { mutableStateOf(selectedSubject) }
+        val singleSelected = selectedSubjects.singleOrNull() ?: ""
+        var inputText by remember(singleSelected) { mutableStateOf(singleSelected) }
 
         AlertDialog(
             onDismissRequest = { showRenameDialog = false },
@@ -118,21 +131,28 @@ fun QuestionBankManageScreen(
                 TextButton(
                     onClick = {
                         val newName = inputText.trim()
-                        if (newName.isNotBlank() && newName != selectedSubject) {
+                        if (newName.isNotBlank() && newName != singleSelected) {
                             scope.launch {
-                                withContext(Dispatchers.IO) {
-                                    QuizDatabase.getInstance(context)
-                                        .questionDao()
-                                        .updateSubject(selectedSubject, newName)
+                                try {
+                                    withContext(Dispatchers.IO) {
+                                        QuizDatabase.getInstance(context)
+                                            .questionDao()
+                                            .updateSubject(singleSelected, newName)
+                                    }
+                                    Toast.makeText(context, "已重命名为「$newName」", Toast.LENGTH_SHORT).show()
+                                    selectedSubjects = setOf(newName)
+                                    refreshTrigger++
+                                } catch (e: Exception) {
+                                    Log.e("QuestionBankManage", "重命名异常: ${e.message}", e)
+                                    withContext(Dispatchers.Main) {
+                                        Toast.makeText(context, "重命名失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                                    }
                                 }
-                                Toast.makeText(context, "已重命名为「$newName」", Toast.LENGTH_SHORT).show()
-                                selectedSubject = newName
-                                loadData()
                             }
                         }
                         showRenameDialog = false
                     },
-                    enabled = inputText.isNotBlank() && inputText.trim() != selectedSubject
+                    enabled = inputText.isNotBlank() && inputText.trim() != singleSelected
                 ) {
                     Text("确定")
                 }
@@ -146,28 +166,60 @@ fun QuestionBankManageScreen(
     }
 
     // ==================== 删除确认对话框 ====================
-    var showDeleteConfirm by remember { mutableStateOf(false) }
+
     if (showDeleteConfirm) {
+        val targetSubjects = if (isBatchDelete) {
+            selectedSubjects.toList()
+        } else {
+            selectedSubjects.take(1).toList()
+        }
+        val targetCount = targetSubjects.sumOf { subject ->
+            subjects.find { it.subject == subject }?.count ?: 0
+        }
+
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("确认删除") },
+            title = { Text(if (isBatchDelete) "确认批量删除" else "确认删除") },
             text = {
-                Text("确定要删除「${selectedSubject}」题库吗？\n" +
-                        "此操作不可撤销，共 ${subjects.find { it.subject == selectedSubject }?.count ?: 0} 道题目将被删除。")
+                if (isBatchDelete) {
+                    Text(
+                        "确定要删除以下 ${targetSubjects.size} 个题库吗？\n" +
+                                "此操作不可撤销，共 $targetCount 道题目将被删除。\n\n" +
+                                targetSubjects.joinToString("\n") { "• $it" }
+                    )
+                } else {
+                    Text(
+                        "确定要删除「${targetSubjects.first()}」题库吗？\n" +
+                                "此操作不可撤销，共 $targetCount 道题目将被删除。"
+                    )
+                }
             },
             confirmButton = {
                 TextButton(
                     onClick = {
                         scope.launch {
-                            withContext(Dispatchers.IO) {
-                                QuizDatabase.getInstance(context)
-                                    .questionDao()
-                                    .deleteBySubject(selectedSubject)
+                            try {
+                                withContext(Dispatchers.IO) {
+                                    val db = QuizDatabase.getInstance(context)
+                                    targetSubjects.forEach { subject ->
+                                        db.questionDao().deleteBySubject(subject)
+                                    }
+                                }
+                                Toast.makeText(
+                                    context,
+                                    if (isBatchDelete) "已删除 ${targetSubjects.size} 个题库" else "已删除「${targetSubjects.first()}」题库",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                                selectedSubjects = emptySet()
+                                showDeleteConfirm = false
+                                refreshTrigger++
+                            } catch (e: Exception) {
+                                Log.e("QuestionBankManage", "删除异常: ${e.message}", e)
+                                withContext(Dispatchers.Main) {
+                                    Toast.makeText(context, "删除失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                                }
+                                showDeleteConfirm = false
                             }
-                            Toast.makeText(context, "已删除「${selectedSubject}」题库", Toast.LENGTH_SHORT).show()
-                            selectedSubject = ""
-                            showDeleteConfirm = false
-                            loadData()
                         }
                     }
                 ) {
@@ -183,6 +235,7 @@ fun QuestionBankManageScreen(
     }
 
     // ==================== 主界面 ====================
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -212,7 +265,8 @@ fun QuestionBankManageScreen(
                         .padding(16.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    // 导入按钮
+                    // 导入Excel按钮
+                    // 注意：导入时请校验 Excel 文件格式，确保包含正确的列头（如：题目、选项、答案等）
                     OutlinedButton(
                         onClick = { onImportClick?.invoke() },
                         modifier = Modifier
@@ -220,16 +274,13 @@ fun QuestionBankManageScreen(
                             .height(44.dp),
                         shape = RoundedCornerShape(8.dp)
                     ) {
-                        Text("导入", fontSize = 14.sp)
+                        Text("导入Excel", fontSize = 14.sp)
                     }
 
-                    // 重命名按钮（选中时启用）
+                    // 重命名按钮（仅选中一项时启用）
                     OutlinedButton(
-                        onClick = {
-                            renameText = selectedSubject
-                            showRenameDialog = true
-                        },
-                        enabled = selectedSubject.isNotBlank(),
+                        onClick = { showRenameDialog = true },
+                        enabled = selectedSubjects.size == 1,
                         modifier = Modifier
                             .weight(1f)
                             .height(44.dp),
@@ -244,10 +295,13 @@ fun QuestionBankManageScreen(
                         Text("重命名", fontSize = 14.sp)
                     }
 
-                    // 删除按钮（选中时启用）
+                    // 删除按钮（仅选中一项时启用）
                     Button(
-                        onClick = { showDeleteConfirm = true },
-                        enabled = selectedSubject.isNotBlank(),
+                        onClick = {
+                            isBatchDelete = false
+                            showDeleteConfirm = true
+                        },
+                        enabled = selectedSubjects.size == 1,
                         modifier = Modifier
                             .weight(1f)
                             .height(44.dp),
@@ -264,11 +318,37 @@ fun QuestionBankManageScreen(
                         Spacer(Modifier.width(4.dp))
                         Text("删除", fontSize = 14.sp)
                     }
+
+                    // 批量删除按钮（选中一项及以上时显示）
+                    if (selectedSubjects.isNotEmpty()) {
+                        Button(
+                            onClick = {
+                                isBatchDelete = true
+                                showDeleteConfirm = true
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(44.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFFD32F2F)
+                            ),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Delete,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text("批量删除", fontSize = 14.sp)
+                        }
+                    }
                 }
             }
         }
     ) { padding ->
         if (isLoading) {
+            // 加载中
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -307,14 +387,16 @@ fun QuestionBankManageScreen(
                 }
             }
         } else {
-            // 统计信息
+            // 题库列表
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding)
             ) {
+                // 统计信息 + 选中信息
                 Text(
-                    text = "共 ${subjects.size} 个题库，$totalCount 道题目",
+                    text = "共 ${subjects.size} 个题库，$totalCount 道题目" +
+                            if (selectedSubjects.isNotEmpty()) "  |  已选 ${selectedSubjects.size} 项" else "",
                     fontSize = 13.sp,
                     color = Color(0xFF999999),
                     modifier = Modifier
@@ -322,7 +404,7 @@ fun QuestionBankManageScreen(
                         .padding(horizontal = 16.dp, vertical = 8.dp)
                 )
 
-                // 题库列表
+                // 列表
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxSize()
@@ -333,9 +415,13 @@ fun QuestionBankManageScreen(
                         SubjectManageCard(
                             subject = item.subject,
                             count = item.count,
-                            isSelected = selectedSubject == item.subject,
+                            isSelected = item.subject in selectedSubjects,
                             onClick = {
-                                selectedSubject = if (selectedSubject == item.subject) "" else item.subject
+                                selectedSubjects = if (item.subject in selectedSubjects) {
+                                    selectedSubjects - item.subject
+                                } else {
+                                    selectedSubjects + item.subject
+                                }
                             }
                         )
                     }
@@ -349,6 +435,7 @@ fun QuestionBankManageScreen(
 
 /**
  * 题库管理条目卡片。
+ * - 包含复选框支持多选
  * - 选中时蓝色边框高亮
  * - 显示题库名称和题目数量
  */
@@ -375,24 +462,37 @@ private fun SubjectManageCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .border(borderWidth, borderColor, RoundedCornerShape(12.dp))
-                .padding(16.dp),
+                .padding(horizontal = 8.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 左侧：名称
-            Column {
-                Text(
-                    text = subject,
-                    fontSize = 16.sp,
-                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                    color = if (isSelected) Color(0xFF1565C0) else Color(0xFF333333)
-                )
-                if (isSelected) {
-                    Text(
-                        text = "已选中",
-                        fontSize = 12.sp,
-                        color = Color(0xFF2196F3)
+            // 左侧：复选框 + 名称
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f)
+            ) {
+                Checkbox(
+                    checked = isSelected,
+                    onCheckedChange = { onClick() },
+                    colors = CheckboxDefaults.colors(
+                        checkedColor = Color(0xFF2196F3)
                     )
+                )
+                Spacer(Modifier.width(4.dp))
+                Column {
+                    Text(
+                        text = subject,
+                        fontSize = 16.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                        color = if (isSelected) Color(0xFF1565C0) else Color(0xFF333333)
+                    )
+                    if (isSelected) {
+                        Text(
+                            text = "已选中",
+                            fontSize = 12.sp,
+                            color = Color(0xFF2196F3)
+                        )
+                    }
                 }
             }
 
@@ -401,7 +501,8 @@ private fun SubjectManageCard(
                 text = "${count}道",
                 fontSize = 14.sp,
                 color = if (isSelected) Color(0xFF2196F3) else Color(0xFF999999),
-                fontWeight = FontWeight.Medium
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.padding(end = 8.dp)
             )
         }
     }
