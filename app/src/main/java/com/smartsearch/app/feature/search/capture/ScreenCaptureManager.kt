@@ -3,15 +3,14 @@ package com.smartsearch.app.feature.search.capture
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.graphics.PixelFormat
 import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
 import android.media.ImageReader
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
-import android.os.Build
 import android.os.Handler
 import android.util.Log
-import android.view.PixelFormat
 
 /**
  * 录屏单例管理类 —— 全局管理 MediaProjection、VirtualDisplay 实例的生命周期。
