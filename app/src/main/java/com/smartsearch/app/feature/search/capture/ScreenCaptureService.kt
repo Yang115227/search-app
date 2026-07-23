@@ -272,13 +272,13 @@ class ScreenCaptureService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent == null) {
-            // 服务被系统重建但无 Intent → 尝试恢复
-            Log.w(TAG, "服务重建，无 Intent 数据")
-            return START_NOT_STICKY
-        }
-
         try {
+            if (intent == null) {
+                // 服务被系统重建但无 Intent → 尝试恢复
+                Log.w(TAG, "服务重建，无 Intent 数据")
+                return START_NOT_STICKY
+            }
+
             when (intent.action) {
                 ACTION_START_CAPTURE -> {
                     // 获取 MediaProjection Intent
@@ -410,6 +410,12 @@ class ScreenCaptureService : Service() {
         if (isForegroundStarted) return
 
         try {
+            val notificationManager = getSystemService(NotificationManager::class.java)
+            if (notificationManager == null) {
+                Log.e(TAG, "NotificationManager 为 null，无法启动前台通知")
+                return
+            }
+
             val pendingIntent = PendingIntent.getActivity(
                 this,
                 0,

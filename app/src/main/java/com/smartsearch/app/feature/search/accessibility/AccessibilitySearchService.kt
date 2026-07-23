@@ -102,6 +102,42 @@ class AccessibilitySearchService : AccessibilityService() {
             }
             return enabledServices?.contains(expectedService) == true
         }
+
+        /** 选区持久化存储 */
+        object SelectionPrefs {
+            private const val PREFS_NAME = "accessibility_selection"
+            private const val KEY_LEFT = "sel_left"
+            private const val KEY_TOP = "sel_top"
+            private const val KEY_RIGHT = "sel_right"
+            private const val KEY_BOTTOM = "sel_bottom"
+
+            fun save(context: Context, rect: Rect) {
+                context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                    .edit()
+                    .putInt(KEY_LEFT, rect.left)
+                    .putInt(KEY_TOP, rect.top)
+                    .putInt(KEY_RIGHT, rect.right)
+                    .putInt(KEY_BOTTOM, rect.bottom)
+                    .apply()
+            }
+
+            fun load(context: Context): Rect? {
+                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                val left = prefs.getInt(KEY_LEFT, -1)
+                val top = prefs.getInt(KEY_TOP, -1)
+                val right = prefs.getInt(KEY_RIGHT, -1)
+                val bottom = prefs.getInt(KEY_BOTTOM, -1)
+                if (left < 0 || top < 0 || right < 0 || bottom < 0) return null
+                return Rect(left, top, right, bottom)
+            }
+
+            fun clear(context: Context) {
+                context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                    .edit()
+                    .clear()
+                    .apply()
+            }
+        }
     }
 
     // ==================== 内部状态 ====================
@@ -136,6 +172,9 @@ class AccessibilitySearchService : AccessibilityService() {
         // 注册到静态持有者，供 FloatingWindowService 获取实例
         AccessibilitySearchServiceHolder.instance = this
         serviceInstance = this
+
+        // 恢复上次保存的选区
+        restoreSelectionRect()
 
         // 配置无障碍服务信息
         val info = AccessibilityServiceInfo().apply {
@@ -542,6 +581,13 @@ class AccessibilitySearchService : AccessibilityService() {
         // 取消等待中的节流扫描，立即执行
         cancelThrottle()
         performScan()
+
+        // 持久化保存选区
+        try {
+            SelectionPrefs.save(this, rect)
+        } catch (e: Exception) {
+            Log.e(TAG, "保存选区失败: ${e.message}", e)
+        }
     }
 
     /**
@@ -549,5 +595,45 @@ class AccessibilitySearchService : AccessibilityService() {
      */
     fun clearSelectionRect() {
         targetSelectionRect = null
+
+        // 清除持久化选区
+        try {
+            SelectionPrefs.clear(this)
+        } catch (e: Exception) {
+            Log.e(TAG, "清除选区异常: ${e.message}", e)
+        }
+    }
+
+    /**
+     * 恢复上次保存的选区。
+     * 如果上次选区存在且未越界，自动设置选区并触发一次扫描。
+     * 包含越界适配：如果选区超出屏幕边界，自动缩放到边界内。
+     */
+    private fun restoreSelectionRect() {
+        try {
+            val savedRect = SelectionPrefs.load(this) ?: return
+            val displayMetrics = resources.displayMetrics
+            val screenWidth = displayMetrics.widthPixels
+            val screenHeight = displayMetrics.heightPixels
+
+            // 越界适配：如果选区超出屏幕，缩放到边界内
+            val clampedRect = Rect(
+                savedRect.left.coerceIn(0, screenWidth),
+                savedRect.top.coerceIn(0, screenHeight),
+                savedRect.right.coerceIn(0, screenWidth),
+                savedRect.bottom.coerceIn(0, screenHeight)
+            )
+
+            // 如果完全越界（选区在屏幕外），忽略
+            if (clampedRect.width() <= 0 || clampedRect.height() <= 0) return
+
+            Log.d(TAG, "恢复上次选区: $clampedRect")
+            targetSelectionRect = RectF(clampedRect)
+            // 触发一次扫描
+            cancelThrottle()
+            performScan()
+        } catch (e: Exception) {
+            Log.e(TAG, "恢复选区异常: ${e.message}", e)
+        }
     }
 }

@@ -106,7 +106,11 @@ fun QuestionBankManageScreen(
 
     // refreshTrigger 或 refreshKey 变化时重新加载数据（覆盖初始加载和操作后的刷新）
     LaunchedEffect(refreshTrigger, refreshKey) {
-        loadData()
+        try {
+            loadData()
+        } catch (e: Exception) {
+            Log.e("QuestionBankManage", "LaunchedEffect 加载数据异常: ${e.message}", e)
+        }
     }
 
     // ==================== 重命名对话框 ====================
