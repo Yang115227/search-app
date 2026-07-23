@@ -231,7 +231,7 @@ class CameraSearchActivity : ComponentActivity() {
             text = "等待识别..."
             setTextColor(Color.WHITE)
             textSize = 15f
-            lineSpacingExtra = 4f
+            setLineSpacing(4f, 1.0f)
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 0
