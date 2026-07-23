@@ -36,6 +36,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import kotlin.properties.Delegates
 import com.smartsearch.app.core.permission.PermissionManager
 import com.smartsearch.app.core.service.FloatingWindowService
+import com.smartsearch.app.core.utils.LogExporter
 import com.smartsearch.app.core.service.FloatWindowManager
 import com.smartsearch.app.data.local.QuizDatabase
 import com.smartsearch.app.data.parser.AnswerCleaner
@@ -348,7 +349,8 @@ class HomeActivity : ComponentActivity() {
                             onOpenWrongBook = { openWrongBook() },
                             onOpenPracticeList = {
                                 navController.navigate("question_bank_list")
-                            }
+                            },
+                            onExportLog = { exportLog() }
                         )
                     }
                     composable("question_bank_list") {
@@ -387,6 +389,15 @@ class HomeActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    // ==================== 日志导出 ====================
+
+    /**
+     * 导出调试日志到文件并分享。
+     */
+    private fun exportLog() {
+        LogExporter.exportAndShare(this)
     }
 
     // ==================== 无障碍搜题 ====================
@@ -731,7 +742,8 @@ fun HomeScreen(
     onOpenQuestionBank: () -> Unit,
     onOpenPractice: () -> Unit,
     onOpenWrongBook: () -> Unit,
-    onOpenPracticeList: () -> Unit = onOpenPractice
+    onOpenPracticeList: () -> Unit = onOpenPractice,
+    onExportLog: () -> Unit = {}
 ) {
     val scrollState = rememberScrollState()
 
@@ -877,6 +889,32 @@ fun HomeScreen(
                 subtitle = "复习错题",
                 onClick = onOpenWrongBook,
                 modifier = Modifier.weight(1f)
+            )
+        }
+
+        // ── 日志导出 ──
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = "调试工具",
+            fontSize = 16.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        OutlinedButton(
+            onClick = onExportLog,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(44.dp),
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.outlinedButtonColors(
+                contentColor = Color(0xFF666666)
+            )
+        ) {
+            Text(
+                text = "导出调试日志",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium
             )
         }
 

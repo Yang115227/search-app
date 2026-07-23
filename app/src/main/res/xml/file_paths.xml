@@ -9,4 +9,9 @@
     <files-path
         name="files"
         path="." />
+
+    <!-- 应用外部文件目录（日志导出） -->
+    <external-files-path
+        name="external_downloads"
+        path="Download/" />
 </paths>
