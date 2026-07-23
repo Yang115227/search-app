@@ -299,15 +299,28 @@ class PracticeDialog(private val context: Context) {
 
         // 解析选项
         optionsGroup.removeAllViews()
-        val options = parseOptions(q.options)
-        if (options.isEmpty()) {
-            // 没有选项 → 显示默认 ABCD 选项
-            listOf("A", "B", "C", "D").forEach { label ->
-                addOptionButton("$label. 请输入答案")
-            }
+        val isTrueFalse = isTrueFalseQuestion(q)
+        Log.d("【PRACTICE_LOG】", "PracticeDialog题型识别: questionId=${q.id} isTrueFalse=$isTrueFalse options=[${q.options.take(100)}] 答案=[${q.answer.take(50)}]")
+
+        if (isTrueFalse) {
+            // ── 判断题分支：渲染【正确】【错误】两个固定选项 ──
+            Log.d("【PRACTICE_LOG】", "PracticeDialog判断题渲染: 初始化正确/错误按钮")
+            addOptionButton("正确")
+            addOptionButton("错误")
         } else {
-            options.forEach { option ->
-                addOptionButton(option)
+            // ── 选择题分支：解析选项列表 ──
+            val options = parseOptions(q.options)
+            Log.d("【PRACTICE_LOG】", "PracticeDialog选择题渲染: questionId=${q.id} 选项数组长度=${options.size} 全部选项=${options}")
+            if (options.isEmpty()) {
+                Log.w("【PRACTICE_LOG】", "PracticeDialog选择题选项为空: questionId=${q.id} 原始options=[${q.options}]")
+                // 没有选项 → 显示默认 ABCD 选项
+                listOf("A", "B", "C", "D").forEach { label ->
+                    addOptionButton("$label. 请输入答案")
+                }
+            } else {
+                options.forEach { option ->
+                    addOptionButton(option)
+                }
             }
         }
     }
@@ -361,6 +374,14 @@ class PracticeDialog(private val context: Context) {
     }
 
     /**
+     * 判断题目是否为判断题。
+     * 规则：options 为空且 answer 不为空则判定为判断题。
+     */
+    private fun isTrueFalseQuestion(q: QuestionEntity): Boolean {
+        return q.options.isBlank() && q.answer.isNotBlank()
+    }
+
+    /**
      * 添加一个选项按钮到 RadioGroup。
      */
     private fun addOptionButton(text: String) {
@@ -390,12 +411,23 @@ class PracticeDialog(private val context: Context) {
         }
 
         val q = allQuestions[currentIndex]
-        val options = parseOptions(q.options)
-        val selectedAnswer = if (selectedOptionIndex < options.size) {
-            options[selectedOptionIndex]
+        val isTrueFalse = isTrueFalseQuestion(q)
+        val selectedAnswer: String
+        val options: List<String>
+
+        if (isTrueFalse) {
+            // 判断题：index 0 → 正确, index 1 → 错误
+            selectedAnswer = if (selectedOptionIndex == 0) "正确" else "错误"
+            options = emptyList()
         } else {
-            ""
+            options = parseOptions(q.options)
+            selectedAnswer = if (selectedOptionIndex < options.size) {
+                options[selectedOptionIndex]
+            } else {
+                ""
+            }
         }
+        Log.d("【PRACTICE_LOG】", "PracticeDialog提交答案: questionId=${q.id} isTrueFalse=$isTrueFalse selectedIndex=$selectedOptionIndex selectedAnswer=$selectedAnswer correctAnswer=${q.answer}")
 
         isSubmitted = true
         submitButton.isEnabled = false
@@ -440,13 +472,15 @@ class PracticeDialog(private val context: Context) {
         // 标记选中选项的正确/错误颜色
         for (i in 0 until optionsGroup.childCount) {
             val radio = optionsGroup.getChildAt(i) as? RadioButton ?: continue
-            if (i < options.size) {
-                val optText = options[i]
-                if (AnswerCleaner.compare(optText, q.answer)) {
-                    radio.setTextColor(Color.parseColor("#2E7D32")) // 绿色 = 正确答案
-                } else if (i == selectedOptionIndex) {
-                    radio.setTextColor(Color.parseColor("#C62828")) // 红色 = 选错
-                }
+            val optText = if (isTrueFalse) {
+                if (i == 0) "正确" else "错误"
+            } else {
+                if (i < options.size) options[i] else continue
+            }
+            if (AnswerCleaner.compare(optText, q.answer)) {
+                radio.setTextColor(Color.parseColor("#2E7D32")) // 绿色 = 正确答案
+            } else if (i == selectedOptionIndex) {
+                radio.setTextColor(Color.parseColor("#C62828")) // 红色 = 选错
             }
         }
     }

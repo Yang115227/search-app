@@ -356,11 +356,16 @@ fun AnswerScreen(
                         val selectedIndex = answers[q.id]
                         if (selectedIndex == null) return@AnswerBottomBar
 
-                        // 检查答案
-                        val options = parseOptions(q.options)
-                        val selectedAnswer = if (selectedIndex < options.size) {
-                            options[selectedIndex]
-                        } else ""
+                        // 检查答案（判断题型适配）
+                        val isTrueFalse = isTrueFalseQuestion(q)
+                        val selectedAnswer = if (isTrueFalse) {
+                            // 判断题：index 0 → 正确, index 1 → 错误
+                            if (selectedIndex == 0) "正确" else "错误"
+                        } else {
+                            val options = parseOptions(q.options)
+                            if (selectedIndex < options.size) options[selectedIndex] else ""
+                        }
+                        Log.d("【PRACTICE_LOG】", "提交答案: questionId=${q.id} isTrueFalse=$isTrueFalse selectedIndex=$selectedIndex selectedAnswer=$selectedAnswer correctAnswer=${q.answer}")
 
                         val isCorrect = AnswerCleaner.compare(selectedAnswer, q.answer)
 
@@ -573,36 +578,75 @@ fun AnswerScreen(
 
                     Spacer(Modifier.height(20.dp))
 
-                    // 选项
-                    val options = parseOptions(q.options)
-                    Log.d("【PRACTICE_LOG】", "渲染选项: questionId=${q.id} optionsCount=${options.size}")
-                    options.forEachIndexed { index, option ->
-                        Log.d("【PRACTICE_LOG】", "  选项[$index]: ${option.take(100)}")
-                        val isSelected = selectedIndex == index
-                        OptionItem(
-                            text = option,
-                            index = index,
-                            isSelected = isSelected,
-                            isSubmitted = isSubmitted,
-                            isCorrect = isSubmitted && AnswerCleaner.compare(option, q.answer),
-                            isWrong = isSubmitted && isSelected && !AnswerCleaner.compare(option, q.answer),
-                            enabled = !isSubmitted,
-                            onClick = {
-                                if (!isSubmitted) {
-                                    answers = answers + (q.id to index)
-                                    saveProgress()
+                    // 判断题目类型
+                    val isTrueFalse = isTrueFalseQuestion(q)
+                    Log.d("【PRACTICE_LOG】", "题型识别: questionId=${q.id} isTrueFalse=$isTrueFalse options原文=[${q.options.take(100)}] 答案=[${q.answer.take(50)}]")
+
+                    if (isTrueFalse) {
+                        // ── 判断题分支：渲染【正确】【错误】两个固定作答按钮 ──
+                        Log.d("【PRACTICE_LOG】", "判断题渲染: 初始化正确/错误按钮")
+                        listOf("正确" to 0, "错误" to 1).forEach { (label, idx) ->
+                            val isSelected = selectedIndex == idx
+                            OptionItem(
+                                text = label,
+                                index = idx,
+                                isSelected = isSelected,
+                                isSubmitted = isSubmitted,
+                                isCorrect = isSubmitted && AnswerCleaner.compare(label, q.answer),
+                                isWrong = isSubmitted && isSelected && !AnswerCleaner.compare(label, q.answer),
+                                enabled = !isSubmitted,
+                                onClick = {
+                                    if (!isSubmitted) {
+                                        answers = answers + (q.id to idx)
+                                        Log.d("【PRACTICE_LOG】", "判断题选择: questionId=${q.id} selected=$label idx=$idx")
+                                        saveProgress()
+                                    }
                                 }
-                            }
-                        )
-                        Spacer(Modifier.height(8.dp))
+                            )
+                            Spacer(Modifier.height(8.dp))
+                        }
+                    } else {
+                        // ── 选择题分支：渲染选项列表 ──
+                        val options = parseOptions(q.options)
+                        Log.d("【PRACTICE_LOG】", "选择题渲染: questionId=${q.id} 选项数组长度=${options.size} 全部选项=${options}")
+                        if (options.isEmpty()) {
+                            Log.w("【PRACTICE_LOG】", "选择题选项为空: questionId=${q.id} 原始options=[${q.options}]")
+                        }
+                        options.forEachIndexed { index, option ->
+                            Log.d("【PRACTICE_LOG】", "  选项[$index]: ${option.take(100)}")
+                            val isSelected = selectedIndex == index
+                            OptionItem(
+                                text = option,
+                                index = index,
+                                isSelected = isSelected,
+                                isSubmitted = isSubmitted,
+                                isCorrect = isSubmitted && AnswerCleaner.compare(option, q.answer),
+                                isWrong = isSubmitted && isSelected && !AnswerCleaner.compare(option, q.answer),
+                                enabled = !isSubmitted,
+                                onClick = {
+                                    if (!isSubmitted) {
+                                        answers = answers + (q.id to index)
+                                        saveProgress()
+                                    }
+                                }
+                            )
+                            Spacer(Modifier.height(8.dp))
+                        }
                     }
 
                     // 提交后显示结果
                     if (isSubmitted) {
                         Spacer(Modifier.height(16.dp))
-                        val isCorrect = options.getOrNull(selectedIndex ?: -1)?.let { selected ->
-                            AnswerCleaner.compare(selected, q.answer)
-                        } ?: false
+                        val isCorrect = if (isTrueFalse) {
+                            val label = if (selectedIndex == 0) "正确" else "错误"
+                            AnswerCleaner.compare(label, q.answer)
+                        } else {
+                            val options = parseOptions(q.options)
+                            options.getOrNull(selectedIndex ?: -1)?.let { selected ->
+                                AnswerCleaner.compare(selected, q.answer)
+                            } ?: false
+                        }
+                        Log.d("【PRACTICE_LOG】", "结果判定: questionId=${q.id} isTrueFalse=$isTrueFalse selectedIndex=$selectedIndex isCorrect=$isCorrect")
 
                         Card(
                             modifier = Modifier.fillMaxWidth(),
@@ -991,4 +1035,16 @@ private fun parseOptions(options: String): List<String> {
     // 6. 最后兜底：返回单个选项
     Log.d("【PRACTICE_LOG】", "parseOptions 无法拆分，返回单元素列表: [${options}]")
     return listOf(options)
+}
+
+/**
+ * 判断题目是否为判断题。
+ *
+ * 规则：如果 options 字段为空或空白，且 answer 字段不为空，则判定为判断题。
+ * 判断题没有选项列表，直接渲染【正确】【错误】两个固定作答按钮。
+ */
+private fun isTrueFalseQuestion(q: QuestionEntity): Boolean {
+    val isTF = q.options.isBlank() && q.answer.isNotBlank()
+    Log.d("【PRACTICE_LOG】", "isTrueFalseQuestion: questionId=${q.id} optionsBlank=${q.options.isBlank()} answerNotBlank=${q.answer.isNotBlank()} result=$isTF")
+    return isTF
 }
