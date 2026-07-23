@@ -377,14 +377,23 @@ fun AnswerScreen(
     ) { padding ->
         Log.d("【PRACTICE_LOG】", "Scaffold content 分支判断: isLoading=$isLoading")
         if (isLoading) {
+            Log.d("【PRACTICE_LOG】", "isLoading分支: 开始渲染Box")
+            // 先尝试渲染一个最简单的纯色背景Box，跳过CircularProgressIndicator
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding),
                 contentAlignment = Alignment.Center
             ) {
-                CircularProgressIndicator(color = Color(0xFF4CAF50))
+                Log.d("【PRACTICE_LOG】", "isLoading分支: Box内部开始渲染子组件")
+                // 用Text替代CircularProgressIndicator测试
+                Text(
+                    text = "加载中...",
+                    color = Color(0xFF4CAF50),
+                    fontSize = 16.sp
+                )
             }
+            Log.d("【PRACTICE_LOG】", "isLoading分支: Box渲染完成")
         } else if (questions.isEmpty()) {
             Box(
                 modifier = Modifier
