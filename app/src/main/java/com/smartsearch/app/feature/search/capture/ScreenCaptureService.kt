@@ -488,14 +488,20 @@ class ScreenCaptureService : Service() {
 
     /**
      * 启动录屏采集。
+     * 先销毁旧实例（MediaProjection、VirtualDisplay），再创建新实例。
      *
      * @param projectionIntent MediaProjection 授权 Intent（来自 Activity#onActivityResult）
      * @param rect 用户选区矩形（屏幕坐标），可为 null（后续通过 updateSelectionRect 设置）
      */
     private fun startCapture(projectionIntent: Intent, rect: Rect?) {
-        if (isCapturing) {
-            Log.w(TAG, "录屏采集已在进行中，忽略重复请求")
-            return
+        // 先销毁旧实例，释放资源（全局实例管理）
+        try {
+            if (isCapturing) {
+                Log.w(TAG, "录屏采集已在进行中，先销毁旧实例")
+                stopCaptureInternal()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "销毁旧采集实例异常: ${e.message}", e)
         }
 
         try {
@@ -512,11 +518,13 @@ class ScreenCaptureService : Service() {
                 PaddleOCREngine.init(this)
                 if (!PaddleOCREngine.isReady()) {
                     Log.e(TAG, "PaddleOCR 引擎初始化失败")
-                    FloatWindowManager.showAnswerWindow(
-                        this,
-                        answer = "OCR 引擎初始化失败",
-                        explanation = "无法启动 OCR 识别引擎，请重启应用后重试。"
-                    )
+                    try {
+                        FloatWindowManager.showAnswerWindow(
+                            this,
+                            answer = "OCR 引擎初始化失败",
+                            explanation = "无法启动 OCR 识别引擎，请重启应用后重试。"
+                        )
+                    } catch (_: Exception) { }
                     switchToAccessibilityMode()
                     stopSelf()
                     return
@@ -541,7 +549,9 @@ class ScreenCaptureService : Service() {
                 override fun onStop() {
                     Log.w(TAG, "MediaProjection 已停止（权限被回收或页面拦截）")
                     mainHandler.post {
-                        switchToAccessibilityMode()
+                        try {
+                            switchToAccessibilityMode()
+                        } catch (_: Exception) { }
                         stopSelf()
                     }
                 }
@@ -555,7 +565,11 @@ class ScreenCaptureService : Service() {
                 2 // 缓冲队列大小
             ).apply {
                 setOnImageAvailableListener({ reader ->
-                    onImageAvailable(reader)
+                    try {
+                        onImageAvailable(reader)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "ImageReader 回调异常: ${e.message}", e)
+                    }
                 }, backgroundHandler)
             }
 
@@ -580,9 +594,38 @@ class ScreenCaptureService : Service() {
             if (!isForegroundStarted) {
                 try { startForegroundNotification() } catch (_: Exception) { }
             }
+            // 异常时释放资源
+            try { stopCaptureInternal() } catch (_: Exception) { }
+            // 友好弹窗提示用户
+            try {
+                FloatWindowManager.showAnswerWindow(
+                    this,
+                    answer = "录屏启动失败",
+                    explanation = "录屏服务启动异常，请重试。\n\n错误信息：${e.message}"
+                )
+            } catch (_: Exception) { }
             switchToAccessibilityMode()
             stopSelf()
         }
+    }
+
+    /**
+     * 内部释放采集资源，不触发 stopForeground。
+     */
+    private fun stopCaptureInternal() {
+        isCapturing = false
+        try {
+            virtualDisplay?.release()
+        } catch (_: Exception) { }
+        virtualDisplay = null
+        try {
+            imageReader?.close()
+        } catch (_: Exception) { }
+        imageReader = null
+        try {
+            mediaProjection?.stop()
+        } catch (_: Exception) { }
+        mediaProjection = null
     }
 
     // ==================== 图像帧处理 ====================
@@ -839,32 +882,39 @@ class ScreenCaptureService : Service() {
 
     /**
      * 停止录屏采集（释放所有资源）。
+     * 全链路异常捕获，杜绝闪退。
      */
     fun stopCapture() {
-        isCapturing = false
+        try {
+            isCapturing = false
 
-        // 清除录屏授权标记
-        PermissionManager.clearScreenCaptureGranted(this)
+            // 清除录屏授权标记
+            try { PermissionManager.clearScreenCaptureGranted(this) } catch (_: Exception) { }
 
-        // 停止 VirtualDisplay
-        virtualDisplay?.release()
-        virtualDisplay = null
+            // 停止 VirtualDisplay
+            try { virtualDisplay?.release() } catch (_: Exception) { }
+            virtualDisplay = null
 
-        // 关闭 ImageReader
-        imageReader?.close()
-        imageReader = null
+            // 关闭 ImageReader
+            try { imageReader?.close() } catch (_: Exception) { }
+            imageReader = null
 
-        // 停止 MediaProjection
-        mediaProjection?.stop()
-        mediaProjection = null
+            // 停止 MediaProjection
+            try { mediaProjection?.stop() } catch (_: Exception) { }
+            mediaProjection = null
 
-        // 停止前台服务
-        if (isForegroundStarted) {
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            isForegroundStarted = false
+            // 停止前台服务
+            if (isForegroundStarted) {
+                try {
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                } catch (_: Exception) { }
+                isForegroundStarted = false
+            }
+
+            Log.d(TAG, "录屏采集已停止，所有资源已释放")
+        } catch (e: Exception) {
+            Log.e(TAG, "stopCapture 异常: ${e.message}", e)
         }
-
-        Log.d(TAG, "录屏采集已停止，所有资源已释放")
     }
 
     // ==================== 模式切换 ====================
@@ -876,6 +926,7 @@ class ScreenCaptureService : Service() {
      * 1. MediaProjection 权限被用户回收
      * 2. FLAG_SECURE 页面（银行、支付等防截屏页面）
      * 3. MediaProjection 启动失败
+     * 全链路异常捕获，杜绝闪退。
      */
     private fun switchToAccessibilityMode() {
         try {
@@ -885,18 +936,22 @@ class ScreenCaptureService : Service() {
             val accessibilityService = AccessibilitySearchService.getInstance()
             if (accessibilityService != null) {
                 // 无障碍服务仍在运行 → 直接切换
-                FloatWindowManager.showSelectOverlay(this) { rect ->
-                    accessibilityService.setSelectionRect(rect)
-                }
+                try {
+                    FloatWindowManager.showSelectOverlay(this) { rect ->
+                        accessibilityService.setSelectionRect(rect)
+                    }
+                } catch (_: Exception) { }
             } else {
                 // 无障碍服务未运行 → 显示悬浮球，让用户手动开启无障碍
-                FloatWindowManager.showAnswerWindow(
-                    this,
-                    answer = "录屏模式已停止",
-                    explanation = "原因：录屏权限被回收或页面不支持截屏。\n\n" +
-                            "请开启无障碍服务后继续使用搜题功能。\n" +
-                            "设置路径：设置 → 无障碍 → 智能搜题"
-                )
+                try {
+                    FloatWindowManager.showAnswerWindow(
+                        this,
+                        answer = "录屏模式已停止",
+                        explanation = "原因：录屏权限被回收或页面不支持截屏。\n\n" +
+                                "请开启无障碍服务后继续使用搜题功能。\n" +
+                                "设置路径：设置 → 无障碍 → 智能搜题"
+                    )
+                } catch (_: Exception) { }
             }
         } catch (e: Exception) {
             Log.e(TAG, "切换无障碍模式异常: ${e.message}", e)

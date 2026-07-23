@@ -40,6 +40,9 @@
     <!-- 唤醒锁（防止录屏时 CPU 休眠） -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+    <!-- Android 13+ 通知权限（录屏前台服务需要） -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <!-- 查询其他应用包（Android 11+ 包可见性），仅查询必要的包 -->
     <!-- 注意：Google Play 上架需要填写声明表单，建议缩小为 <queries> 过滤 -->
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"

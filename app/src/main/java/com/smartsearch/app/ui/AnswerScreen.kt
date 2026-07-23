@@ -71,6 +71,9 @@ fun AnswerScreen(
 
     // ── 加载题目 ──
     LaunchedEffect(subject, mode) {
+        // Bundle参数非空兜底：subject 和 mode 为空时使用默认值
+        val safeSubject = subject.ifBlank { "" }
+        val safeMode = mode.ifBlank { "SEQUENTIAL" }
         try {
             val db = QuizDatabase.getInstance(context)
             // 在 IO 线程执行数据库操作，返回结果
@@ -85,8 +88,8 @@ fun AnswerScreen(
                     }
 
                     if (existingSession != null &&
-                        existingSession.subject == subject &&
-                        existingSession.mode == mode
+                        existingSession.subject == safeSubject &&
+                        existingSession.mode == safeMode
                     ) {
                         // 恢复进度
                         val ids: List<Long> = try {
@@ -132,12 +135,15 @@ fun AnswerScreen(
                         )
                     } else {
                         // 创建新会话
-                        val allQuestions = if (subject.isBlank()) {
+                        val allQuestions = if (safeSubject.isBlank()) {
                             db.questionDao().getAllQuestions()
                         } else {
-                            db.questionDao().findBySubject(subject)
+                            db.questionDao().findBySubject(safeSubject)
                         }
-                        val orderedQuestions = if (mode == "RANDOM") {
+                        // 随机排序空列表校验：空列表不调用 shuffled()
+                        val orderedQuestions = if (allQuestions.isEmpty()) {
+                            emptyList()
+                        } else if (safeMode == "RANDOM") {
                             allQuestions.shuffled()
                         } else {
                             allQuestions.sortedBy { it.id }
@@ -146,8 +152,8 @@ fun AnswerScreen(
                         if (orderedQuestions.isNotEmpty()) {
                             val ids = orderedQuestions.map { it.id }
                             val newSession = PracticeSessionEntity(
-                                subject = subject,
-                                mode = mode,
+                                subject = safeSubject,
+                                mode = safeMode,
                                 questionIds = gson.toJson(ids),
                                 currentIndex = 0,
                                 startTime = System.currentTimeMillis()

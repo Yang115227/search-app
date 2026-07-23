@@ -139,26 +139,70 @@ fun QuestionBankListScreen(
                                 isCheckingQuestions = true
                                 try {
                                     val db = QuizDatabase.getInstance(context)
-                                    val count = withContext(Dispatchers.IO) {
+                                    val checkResult = withContext(Dispatchers.IO) {
                                         try {
-                                            if (selectedSubject.isEmpty()) {
+                                            // ① 二次校验：用选中的题库ID查询数据库，校验题库是否已被删除
+                                            val subjectToCheck = selectedSubject
+                                            if (subjectToCheck.isNotEmpty()) {
+                                                val subjects = db.questionDao().getAllSubjects()
+                                                if (subjectToCheck !in subjects) {
+                                                    // 题库已被删除
+                                                    return@withContext Pair(true, 0)
+                                                }
+                                            }
+                                            // ② 查询题目数量
+                                            val count = if (selectedSubject.isEmpty()) {
                                                 db.questionDao().getCount()
                                             } else {
                                                 db.questionDao().getCountBySubject(selectedSubject)
                                             }
+                                            Pair(false, count)
                                         } catch (e: Exception) {
                                             Log.e("QuestionBankList", "查询题目数量异常: ${e.message}", e)
-                                            -1
+                                            Pair(false, -1)
                                         }
                                     }
-                                    if (count == 0) {
+                                    if (checkResult.first) {
+                                        Toast.makeText(
+                                            context,
+                                            "该题库已被删除，请重新选择",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                        // 刷新列表（全在 IO 线程执行）
+                                        withContext(Dispatchers.IO) {
+                                            try {
+                                                val allSubjects = db.questionDao().getAllSubjects()
+                                                val loadedSubjects = allSubjects.map { subject ->
+                                                    SubjectCountItem(subject, db.questionDao().getCountBySubject(subject))
+                                                }
+                                                // 回到主线程更新 UI 状态
+                                                withContext(Dispatchers.Main) {
+                                                    subjects = loadedSubjects
+                                                    selectedSubject = if (loadedSubjects.isNotEmpty()) loadedSubjects.first().subject else ""
+                                                }
+                                            } catch (_: Exception) { }
+                                        }
+                                    } else if (checkResult.second == 0) {
+                                        // 空列表拦截
                                         Toast.makeText(
                                             context,
                                             if (selectedSubject.isEmpty()) "题库中暂无题目，请先导入" else "该学科暂无题目，请先导入",
                                             Toast.LENGTH_SHORT
                                         ).show()
-                                    } else if (count > 0) {
-                                        onStartPractice(selectedSubject, selectedMode)
+                                    } else if (checkResult.second < 0) {
+                                        Toast.makeText(
+                                            context,
+                                            "查询题目数量异常，请重试",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    } else {
+                                        // count > 0，跳转答题页
+                                        if (selectedSubject.isNotBlank()) {
+                                            onStartPractice(selectedSubject, selectedMode)
+                                        } else {
+                                            // 空字符串兜底：跳转全部题库
+                                            onStartPractice("", selectedMode)
+                                        }
                                     }
                                 } catch (e: Exception) {
                                     Log.e("QuestionBankList", "获取数据库实例异常: ${e.message}", e)

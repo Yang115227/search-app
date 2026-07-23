@@ -71,11 +71,23 @@ fun QuestionBankManageScreen(
 
     // ==================== 数据加载 ====================
 
+    // 数据库初始化失败标记：初始化失败时展示空白占位页，不渲染列表避免崩溃
+    var dbInitFailed by remember { mutableStateOf(false) }
+
     // refreshTrigger 或 refreshKey 变化时重新加载数据（覆盖初始加载和操作后的刷新）
     LaunchedEffect(refreshTrigger, refreshKey) {
         isLoading = true
+        dbInitFailed = false
         try {
-            val db = QuizDatabase.getInstance(context)
+            // 数据库初始化可能在 IO 线程失败，捕获后展示占位页
+            val db = try {
+                QuizDatabase.getInstance(context)
+            } catch (e: Exception) {
+                Log.e("QuestionBankManage", "数据库初始化异常: ${e.message}", e)
+                dbInitFailed = true
+                isLoading = false
+                return@LaunchedEffect
+            }
             var loadedItems = emptyList<SubjectManageItem>()
             var allCount = 0
             withContext(Dispatchers.IO) {
@@ -89,6 +101,7 @@ fun QuestionBankManageScreen(
                     Log.e("QuestionBankManage", "数据库查询异常: ${e.message}", e)
                 }
             }
+            // 状态修改必须在主线程
             subjects = loadedItems
             totalCount = allCount
             // 清理已不存在的选中项
@@ -96,6 +109,7 @@ fun QuestionBankManageScreen(
             selectedSubjects = selectedSubjects.filter { it in validSubjects }.toSet()
         } catch (e: Exception) {
             Log.e("QuestionBankManage", "加载题库数据异常: ${e.message}", e)
+            dbInitFailed = true
             Toast.makeText(context, "加载题库数据失败: ${e.message}", Toast.LENGTH_SHORT).show()
         } finally {
             isLoading = false
@@ -340,7 +354,36 @@ fun QuestionBankManageScreen(
             }
         }
     ) { padding ->
-        if (isLoading) {
+        if (dbInitFailed) {
+            // 数据库初始化失败：展示空白占位页，不渲染列表避免崩溃
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "数据库加载失败",
+                        fontSize = 18.sp,
+                        color = Color.Gray
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = "请重启应用或检查存储空间",
+                        fontSize = 14.sp,
+                        color = Color(0xFF999999)
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    OutlinedButton(
+                        onClick = { refreshTrigger++ },
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("重试", fontSize = 14.sp)
+                    }
+                }
+            }
+        } else if (isLoading) {
             // 加载中
             Box(
                 modifier = Modifier

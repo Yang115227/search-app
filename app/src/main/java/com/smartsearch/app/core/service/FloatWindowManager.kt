@@ -1,10 +1,14 @@
 package com.smartsearch.app.core.service
 
+import android.app.Activity
 import android.content.Context
 import android.graphics.Rect
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import android.view.WindowInsets
+import android.view.WindowManager
 import com.smartsearch.app.feature.search.capture.ScreenCaptureService
 import com.smartsearch.app.feature.search.floatview.AnswerFloatWindow
 import com.smartsearch.app.feature.search.floatview.FloatSelectOverlay
@@ -32,7 +36,91 @@ import com.smartsearch.app.feature.search.floatview.FloatSelectOverlay
  */
 object FloatWindowManager {
 
-    /** 选区持久化存储（SharedPreferences） */
+    /**
+     * 获取状态栏高度（像素）。
+     */
+    fun getStatusBarHeight(context: Context): Int {
+        return try {
+            val activity = context as? Activity
+            if (activity != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val insets = activity.window.decorView.rootWindowInsets
+                if (insets != null) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        insets.getInsets(WindowInsets.Type.statusBars()).top
+                    } else {
+                        @Suppress("DEPRECATION")
+                        insets.systemWindowInsetTop
+                    }
+                } else {
+                    getStatusBarHeightFromResources(context)
+                }
+            } else {
+                getStatusBarHeightFromResources(context)
+            }
+        } catch (e: Exception) {
+            getStatusBarHeightFromResources(context)
+        }
+    }
+
+    private fun getStatusBarHeightFromResources(context: Context): Int {
+        val resourceId = context.resources.getIdentifier("status_bar_height", "dimen", "android")
+        return if (resourceId > 0) context.resources.getDimensionPixelSize(resourceId) else 0
+    }
+
+    /**
+     * 获取导航栏高度（像素）。
+     */
+    fun getNavigationBarHeight(context: Context): Int {
+        return try {
+            val activity = context as? Activity
+            if (activity != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                val insets = activity.window.decorView.rootWindowInsets
+                if (insets != null) {
+                    insets.getInsets(WindowInsets.Type.navigationBars()).bottom
+                } else {
+                    0
+                }
+            } else {
+                val resourceId = context.resources.getIdentifier("navigation_bar_height", "dimen", "android")
+                if (resourceId > 0) context.resources.getDimensionPixelSize(resourceId) else 0
+            }
+        } catch (e: Exception) {
+            0
+        }
+    }
+
+    /**
+     * 将屏幕坐标转换为应用可视区域坐标（扣除状态栏、导航栏）。
+     */
+    fun screenToAppRect(context: Context, screenRect: Rect): Rect {
+        val statusBarHeight = getStatusBarHeight(context)
+        val navBarHeight = getNavigationBarHeight(context)
+        return Rect(
+            screenRect.left,
+            (screenRect.top - statusBarHeight).coerceAtLeast(0),
+            screenRect.right,
+            (screenRect.bottom - navBarHeight).coerceAtMost(
+                context.resources.displayMetrics.heightPixels - navBarHeight
+            )
+        )
+    }
+
+    /**
+     * 将应用可视区域坐标转换为屏幕坐标（加上状态栏、导航栏）。
+     */
+    fun appToScreenRect(context: Context, appRect: Rect): Rect {
+        val statusBarHeight = getStatusBarHeight(context)
+        val navBarHeight = getNavigationBarHeight(context)
+        val screenHeight = context.resources.displayMetrics.heightPixels
+        return Rect(
+            appRect.left,
+            (appRect.top + statusBarHeight).coerceAtMost(screenHeight - navBarHeight),
+            appRect.right,
+            (appRect.bottom + statusBarHeight).coerceAtMost(screenHeight)
+        )
+    }
+
+    /** 选区持久化存储（SharedPreferences）- 按模式分键存储 */
     object SelectionPrefs {
         private const val PREFS_NAME = "float_selection"
         private const val KEY_LEFT = "sel_left"
@@ -40,27 +128,35 @@ object FloatWindowManager {
         private const val KEY_RIGHT = "sel_right"
         private const val KEY_BOTTOM = "sel_bottom"
 
-        fun save(context: Context, rect: Rect) {
+        private fun getPrefsKey(mode: SearchMode): String = when (mode) {
+            SearchMode.ACCESSIBILITY -> "accessibility"
+            SearchMode.SCREEN_CAPTURE -> "screen_capture"
+            SearchMode.CAMERA -> "camera"
+        }
+
+        fun save(context: Context, rect: Rect, mode: SearchMode? = null) {
             try {
+                val modeKey = getPrefsKey(mode ?: currentSearchMode)
                 context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                     .edit()
-                    .putInt(KEY_LEFT, rect.left)
-                    .putInt(KEY_TOP, rect.top)
-                    .putInt(KEY_RIGHT, rect.right)
-                    .putInt(KEY_BOTTOM, rect.bottom)
+                    .putInt("${modeKey}_$KEY_LEFT", rect.left)
+                    .putInt("${modeKey}_$KEY_TOP", rect.top)
+                    .putInt("${modeKey}_$KEY_RIGHT", rect.right)
+                    .putInt("${modeKey}_$KEY_BOTTOM", rect.bottom)
                     .apply()
             } catch (e: Exception) {
                 Log.e("FloatWindowManager", "保存选区失败: ${e.message}", e)
             }
         }
 
-        fun load(context: Context): Rect? {
+        fun load(context: Context, mode: SearchMode? = null): Rect? {
             try {
+                val modeKey = getPrefsKey(mode ?: currentSearchMode)
                 val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                val left = prefs.getInt(KEY_LEFT, -1)
-                val top = prefs.getInt(KEY_TOP, -1)
-                val right = prefs.getInt(KEY_RIGHT, -1)
-                val bottom = prefs.getInt(KEY_BOTTOM, -1)
+                val left = prefs.getInt("${modeKey}_$KEY_LEFT", -1)
+                val top = prefs.getInt("${modeKey}_$KEY_TOP", -1)
+                val right = prefs.getInt("${modeKey}_$KEY_RIGHT", -1)
+                val bottom = prefs.getInt("${modeKey}_$KEY_BOTTOM", -1)
                 if (left < 0 || top < 0 || right < 0 || bottom < 0) return null
                 return Rect(left, top, right, bottom)
             } catch (e: Exception) {
@@ -69,12 +165,15 @@ object FloatWindowManager {
             }
         }
 
-        fun clear(context: Context) {
+        fun clear(context: Context, mode: SearchMode? = null) {
             try {
-                context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                    .edit()
-                    .clear()
-                    .apply()
+                val modeKey = getPrefsKey(mode ?: currentSearchMode)
+                val editor = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+                editor.remove("${modeKey}_$KEY_LEFT")
+                editor.remove("${modeKey}_$KEY_TOP")
+                editor.remove("${modeKey}_$KEY_RIGHT")
+                editor.remove("${modeKey}_$KEY_BOTTOM")
+                editor.apply()
             } catch (e: Exception) {
                 Log.e("FloatWindowManager", "清除选区失败: ${e.message}", e)
             }
@@ -191,10 +290,10 @@ object FloatWindowManager {
             currentState == FloatWindowState.CONTINUOUS_SEARCHING) return
 
         selectOverlay = FloatSelectOverlay(ctx).apply {
-            // 恢复上次选区位置：先从内存加载，内存没有则从持久化存储加载
+            // 恢复上次选区位置：先从内存加载，内存没有则从持久化存储加载（按当前模式分键）
             var savedRect = this@FloatWindowManager.lastSelectionRect
             if (savedRect == null) {
-                savedRect = SelectionPrefs.load(ctx)
+                savedRect = SelectionPrefs.load(ctx, currentSearchMode)
                 if (savedRect != null) {
                     this@FloatWindowManager.lastSelectionRect = savedRect
                 }
@@ -210,19 +309,19 @@ object FloatWindowManager {
 
             // 点击"开始搜题" → 进入连续搜题模式
             onStartContinuousSearch = { rect ->
-                // 保存选区（内存 + 持久化）
+                // 保存选区（内存 + 持久化，按模式分键）
                 lastSelectionRect = rect
-                SelectionPrefs.save(ctx, rect)
+                SelectionPrefs.save(ctx, rect, currentSearchMode)
                 // 触发首次搜索
                 this@FloatWindowManager.onRectSelected?.invoke(rect)
                 // 进入连续搜题模式（隐藏选区框，显示底部答案弹窗）
                 startContinuousSearch(ctx)
             }
 
-            // 选区变化时更新保存（记忆功能）
+            // 选区变化时立即落盘保存（记忆功能）
             onSelectionChanged = { rect ->
                 lastSelectionRect = rect
-                SelectionPrefs.save(ctx, rect)
+                SelectionPrefs.save(ctx, rect, currentSearchMode)
                 if (currentState == FloatWindowState.CONTINUOUS_SEARCHING) {
                     this@FloatWindowManager.onContinuousSearch?.invoke(rect)
                 }
@@ -313,16 +412,16 @@ object FloatWindowManager {
                 hideSelectOverlay()
             }
 
-            // 拖拽/缩放时更新选区（内存 + 持久化）
+            // 拖拽/缩放时立即落盘更新选区（内存 + 持久化，按模式分键）
             onSelectionChanged = { rect ->
                 lastSelectionRect = rect
-                SelectionPrefs.save(ctx, rect)
+                SelectionPrefs.save(ctx, rect, currentSearchMode)
             }
 
             // 调整完成（手指抬起）→ 自动隐藏，触发搜索（仅连续搜题模式）
             onAdjustmentComplete = { rect ->
                 lastSelectionRect = rect
-                SelectionPrefs.save(ctx, rect)
+                SelectionPrefs.save(ctx, rect, currentSearchMode)
                 // 录屏模式下更新选区并恢复采集
                 if (isContinuous && currentSearchMode == SearchMode.SCREEN_CAPTURE) {
                     ScreenCaptureService.getInstance()?.apply {
@@ -337,7 +436,7 @@ object FloatWindowManager {
             // 非调整模式（ANSWERING）：点击「开始搜题」进入连续搜题
             onStartContinuousSearch = { rect ->
                 lastSelectionRect = rect
-                SelectionPrefs.save(ctx, rect)
+                SelectionPrefs.save(ctx, rect, currentSearchMode)
                 this@FloatWindowManager.onRectSelected?.invoke(rect)
                 startContinuousSearch(ctx)
             }

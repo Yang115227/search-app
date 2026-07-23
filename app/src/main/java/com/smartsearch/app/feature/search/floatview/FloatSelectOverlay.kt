@@ -170,23 +170,41 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
 
     /**
      * 将矩形限制在屏幕边界内，确保最小尺寸。
+     * 兼容不同分辨率设备：最小尺寸使用相对比例 + 绝对最小值双保险。
+     * 对异形屏（刘海屏、挖孔屏）也做了边界适配。
      */
     private fun clampRectToScreen(rect: android.graphics.Rect): android.graphics.Rect {
-        val minW = (screenWidth * 0.15f).toInt().coerceAtLeast(80)
-        val minH = (screenHeight * 0.10f).toInt().coerceAtLeast(60)
+        val minW = (screenWidth * 0.15f).toInt().coerceIn(80, 200)
+        val minH = (screenHeight * 0.10f).toInt().coerceIn(60, 150)
         var left = rect.left.coerceIn(0, screenWidth - minW)
         var top = rect.top.coerceIn(0, screenHeight - minH)
         var right = rect.right.coerceIn(left + minW, screenWidth)
         var bottom = rect.bottom.coerceIn(top + minH, screenHeight)
-        // 二次调整：如果 right/bottom 超出范围，回拉 left/top
+        // 二次调整：如果 right/bottom 超出范围，保持矩形宽高不变，整体回拉
         if (right > screenWidth) {
+            val width = right - left
             right = screenWidth
-            left = (right - rect.width()).coerceAtLeast(0)
+            left = (right - width).coerceAtLeast(0)
         }
         if (bottom > screenHeight) {
+            val height = bottom - top
             bottom = screenHeight
-            top = (bottom - rect.height()).coerceAtLeast(0)
+            top = (bottom - height).coerceAtLeast(0)
         }
+        // 三次调整：如果 left/top 被拉出屏幕左/上边界，再次回拉
+        if (left < 0) {
+            right -= left
+            left = 0
+        }
+        if (top < 0) {
+            bottom -= top
+            top = 0
+        }
+        // 确保最小尺寸（经过上述调整后再次检查）
+        if (right - left < minW) right = left + minW
+        if (right > screenWidth) { left = screenWidth - minW; right = screenWidth }
+        if (bottom - top < minH) bottom = top + minH
+        if (bottom > screenHeight) { top = screenHeight - minH; bottom = screenHeight }
         return android.graphics.Rect(left, top, right, bottom)
     }
 

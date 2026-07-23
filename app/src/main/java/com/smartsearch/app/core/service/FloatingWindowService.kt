@@ -109,7 +109,7 @@ class FloatingWindowService : Service() {
         val onClick: () -> Unit     // 点击回调
     )
 
-    /** 根据搜题模式获取悬浮球配置，CAMERA 模式不显示悬浮球 */
+    /** 根据搜题模式获取悬浮球配置，三种模式各自独立显示 */
     private fun getConfigForMode(mode: FloatWindowManager.SearchMode): FloatBallConfig? {
         return when (mode) {
             FloatWindowManager.SearchMode.ACCESSIBILITY -> FloatBallConfig(
@@ -124,7 +124,12 @@ class FloatingWindowService : Service() {
                 defaultYRatio = 0.35f,
                 onClick = { startScreenCaptureMode() }
             )
-            FloatWindowManager.SearchMode.CAMERA -> null // 扫描搜题不显示悬浮球
+            FloatWindowManager.SearchMode.CAMERA -> FloatBallConfig(
+                label = "扫",
+                color = Color.parseColor("#FF9800"),
+                defaultYRatio = 0.35f,
+                onClick = { triggerCameraSearch() }
+            )
         }
     }
 
