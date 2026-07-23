@@ -9,6 +9,8 @@ import android.graphics.PorterDuffXfermode
 import android.graphics.Rect
 import android.graphics.RectF
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.text.TextPaint
 import android.view.Gravity
 import android.view.MotionEvent
@@ -666,11 +668,25 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
+        attachedCallbackReceived = true
         Log.d("【SELECT_LOG】", "onAttachedToWindow: 视图已附加到窗口, selectionRect=(${selectionRect.left.toInt()},${selectionRect.top.toInt()},${selectionRect.right.toInt()},${selectionRect.bottom.toInt()})")
+    }
+
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        Log.w("【SELECT_LOG】", "onDetachedFromWindow: 视图已从窗口分离 (可能被系统拒绝)")
     }
 
     /**
      * 通过 WindowManager 将悬浮窗附加到屏幕上。
+     *
+     * 兼容性说明：
+     * - Android 14+ (API 34+) 对 TYPE_APPLICATION_OVERLAY 有额外限制，
+     *   addView 可能同步成功但系统异步拒绝窗口创建（onAttachedToWindow 不会触发）。
+     * - 移除 FLAG_LAYOUT_IN_SCREEN：该标志位与 API 36 的叠加窗口限制可能冲突，
+     *   导致 ViewRootImpl 无法完成初始化。
+     * - addView 后添加延迟检查：1 秒后验证 onAttachedToWindow 是否已触发，
+     *   若未触发则尝试重建窗口。
      */
     fun attachToWindow() {
         if (isAttached) return
@@ -684,6 +700,9 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
         initSelectionRect()
         Log.d("【SELECT_LOG】", "attachToWindow: initSelectionRect 完成, selectionRect=(${selectionRect.left.toInt()},${selectionRect.top.toInt()},${selectionRect.right.toInt()},${selectionRect.bottom.toInt()})")
 
+        // 标记：在 onAttachedToWindow 中设为 true，用于延迟检查
+        attachedCallbackReceived = false
+
         val params = WindowManager.LayoutParams().apply {
             // Android 8.0+ (API 26+) 统一使用 TYPE_APPLICATION_OVERLAY
             type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -694,13 +713,13 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
             }
 
             // 关键 Flag：不拦截底层页面触控，不获取焦点
+            // 注意：API 34+ 移除 FLAG_LAYOUT_IN_SCREEN，避免与叠加窗口限制冲突
             flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
                     WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
 
             // 全屏布局
-            width = screenWidth
-            height = screenHeight
+            width = WindowManager.LayoutParams.MATCH_PARENT
+            height = WindowManager.LayoutParams.MATCH_PARENT
             gravity = Gravity.TOP or Gravity.START
             x = 0
             y = 0
@@ -716,11 +735,56 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
             invalidate()
             // 跨线程重绘兜底：确保即使主线程繁忙也能触发绘制
             postInvalidate()
+
+            // 延迟检视：1 秒后检查 onAttachedToWindow 是否触发
+            // 若未触发，说明系统异步拒绝了窗口创建，尝试重建
+            Handler(Looper.getMainLooper()).postDelayed({
+                if (isAttached && !attachedCallbackReceived) {
+                    Log.w("【SELECT_LOG】", "attachToWindow: 延迟检查发现 onAttachedToWindow 未触发，系统可能异步拒绝了窗口，尝试重建")
+                    // 移除旧视图
+                    try { windowManager.removeView(this@FloatSelectOverlay) } catch (_: Exception) {}
+                    isAttached = false
+                    // 延迟 100ms 后重新添加
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        doAttach(params)
+                    }, 100)
+                } else if (isAttached && attachedCallbackReceived) {
+                    Log.d("【SELECT_LOG】", "attachToWindow: 延迟检查通过，onAttachedToWindow 已正常触发")
+                }
+            }, 1000)
         } catch (e: SecurityException) {
             Log.e("【SELECT_LOG】", "attachToWindow: addView 失败(SecurityException): ${e.message}")
             isAttached = false
         } catch (e: Exception) {
             Log.e("【SELECT_LOG】", "attachToWindow: addView 异常: ${e.message}", e)
+            isAttached = false
+        }
+    }
+
+    /** onAttachedToWindow 是否已被回调（用于延迟检查） */
+    private var attachedCallbackReceived = false
+
+    /**
+     * 实际执行 addView 的封装，供延迟重试使用。
+     */
+    private fun doAttach(params: WindowManager.LayoutParams) {
+        if (isAttached) return
+        attachedCallbackReceived = false
+        try {
+            windowManager.addView(this, params)
+            isAttached = true
+            Log.d("【SELECT_LOG】", "doAttach: 重试 addView 成功")
+            invalidate()
+            postInvalidate()
+
+            // 二次延迟检查
+            Handler(Looper.getMainLooper()).postDelayed({
+                if (isAttached && !attachedCallbackReceived) {
+                    Log.e("【SELECT_LOG】", "doAttach: 重试后 onAttachedToWindow 仍未触发，叠加窗口可能被系统阻止")
+                }
+            }, 2000)
+        } catch (e: Exception) {
+            Log.e("【SELECT_LOG】", "doAttach: 重试 addView 失败: ${e.message}", e)
             isAttached = false
         }
     }
