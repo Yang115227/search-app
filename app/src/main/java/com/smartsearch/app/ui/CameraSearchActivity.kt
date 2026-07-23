@@ -231,7 +231,7 @@ class CameraSearchActivity : ComponentActivity() {
             text = "等待识别..."
             setTextColor(Color.WHITE)
             textSize = 15f
-            lineSpacing(4f, 1.0f)
+            lineSpacingExtra = 4f
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 0
@@ -643,6 +643,7 @@ class CameraSearchActivity : ComponentActivity() {
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     touchMode = 0
+                    lastPinchDist = 0f
                 }
             }
             return true
@@ -666,18 +667,23 @@ class CameraSearchActivity : ComponentActivity() {
             }
         }
 
+        private var lastPinchDist = 0f
+
         private fun calculatePinchScale(event: MotionEvent): Float {
-            if (event.pointerCount < 2) return 1f
+            if (event.pointerCount < 2) {
+                lastPinchDist = 0f
+                return 1f
+            }
             val dx = event.getX(0) - event.getX(1)
             val dy = event.getY(0) - event.getY(1)
             val newDist = kotlin.math.sqrt((dx * dx + dy * dy).toDouble()).toFloat()
             if (newDist < 10f) return 1f
-            val oldDist = event.getHistoricalEvent(0)?.let { hist ->
-                val hdx = hist.getX(0) - hist.getX(1)
-                val hdy = hist.getY(0) - hist.getY(1)
-                kotlin.math.sqrt((hdx * hdx + hdy * hdy).toDouble()).toFloat()
-            } ?: newDist
-            return if (oldDist > 0) newDist / oldDist else 1f
+            if (lastPinchDist <= 0f) {
+                lastPinchDist = newDist
+                return 1f
+            }
+            val scale = newDist / lastPinchDist
+            return scale
         }
     }
 }
