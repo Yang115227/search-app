@@ -76,7 +76,7 @@ object LogExporter {
                 writer.write("========================================\n\n")
                 filteredLines.forEach { line ->
                     writer.write(line)
-                    writer.write('\n')
+                    writer.newLine()
                 }
             }
 
