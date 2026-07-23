@@ -250,6 +250,13 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
         strokeWidth = borderWidth
     }
 
+    /** 调试用红色边框画笔（半透明红色，用于肉眼确认控件渲染区域） */
+    private val debugBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.argb(128, 255, 0, 0)
+        style = Paint.Style.STROKE
+        strokeWidth = 6f.dp(6f)
+    }
+
     /** 选区四角高亮短线画笔 */
     private val cornerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = borderColor
@@ -381,6 +388,9 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
 
         // ── 第 2 层：选区边框 ──
         canvas.drawRect(selectionRect, borderPaint)
+
+        // ── 第 2b 层：调试红色边框（肉眼确认控件是否渲染） ──
+        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), debugBorderPaint)
 
         // ── 第 3 层：四角高亮短线 ──
         drawCornerHighlights(canvas)

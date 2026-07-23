@@ -122,7 +122,7 @@ object FloatWindowManager {
 
     /**
      * 选区持久化存储（SharedPreferences）
-     * - 三组独立前缀：access_ / record_ / camera_，彻底隔离
+     * - 三组独立前缀：access_ / camera_，彻底隔离（录屏与无障碍共享 access_ 前缀）
      * - 横竖屏分开存储（orientation后缀）
      * - 存取时自动做坐标换算（扣除/加上状态栏、导航栏高度）
      * - 使用 commit() 同步落盘，防止进程被杀丢失
@@ -137,7 +137,7 @@ object FloatWindowManager {
 
         private fun getModeKey(mode: SearchMode): String = when (mode) {
             SearchMode.ACCESSIBILITY -> "access"
-            SearchMode.SCREEN_CAPTURE -> "record"
+            SearchMode.SCREEN_CAPTURE -> "access"
             SearchMode.CAMERA -> "camera"
         }
 
@@ -269,6 +269,9 @@ object FloatWindowManager {
     /** 当前悬浮窗状态 */
     private var currentState = FloatWindowState.IDLE
 
+    /** 是否正在过渡中（防止并发重复创建，例如录屏授权回调+300ms延迟期间重复调用） */
+    private var isTransitioning = false
+
     // ── 悬浮窗实例 ──
     private var selectOverlay: FloatSelectOverlay? = null
     private var answerWindow: AnswerFloatWindow? = null
@@ -376,6 +379,7 @@ object FloatWindowManager {
         if (currentState == FloatWindowState.SELECTING ||
             currentState == FloatWindowState.CONTINUOUS_SEARCHING) {
             Log.d("【SELECT_LOG】", "showSelectOverlay: 已有选题框, 跳过创建")
+            isTransitioning = false
             return
         }
 
@@ -407,11 +411,11 @@ object FloatWindowManager {
                 startContinuousSearch(ctx)
             }
 
-            // 选区变化时立即落盘保存（记忆功能）
+            // 选区变化时更新内存缓存（不落盘，由 onSaveRect 在 TouchUp 时统一落盘）
             onSelectionChanged = { rect ->
                 Log.d("【SELECT_LOG】", "showSelectOverlay onSelectionChanged: rect=(${rect.left},${rect.top},${rect.right},${rect.bottom}) mode=${currentSearchMode}")
                 lastSelectionRect = rect
-                SelectionPrefs.save(ctx, rect, currentSearchMode)
+                // 注意：不在此处落盘，由 onSaveRect 在 TouchUp 时统一保存，减少频繁 SP 读写
                 if (currentState == FloatWindowState.CONTINUOUS_SEARCHING) {
                     this@FloatWindowManager.onContinuousSearch?.invoke(rect)
                 }
@@ -438,6 +442,8 @@ object FloatWindowManager {
         }
 
         currentState = FloatWindowState.SELECTING
+        isTransitioning = false
+        Log.d("【SELECT_LOG】", "showSelectOverlay: 状态机 SELECTING, isTransitioning=false")
     }
 
     // ==================== 连续搜题模式 ====================
@@ -657,6 +663,17 @@ object FloatWindowManager {
      * @param context 上下文
      */
     fun showSelectOverlayForScreenCapture(context: Context) {
+        // 状态机防并发：正在过渡中则跳过
+        if (isTransitioning) {
+            Log.d("【SELECT_LOG】", "showSelectOverlayForScreenCapture: 正在过渡中, 跳过")
+            return
+        }
+        if (currentState == FloatWindowState.SELECTING ||
+            currentState == FloatWindowState.CONTINUOUS_SEARCHING) {
+            Log.d("【SELECT_LOG】", "showSelectOverlayForScreenCapture: 已有选题框, 跳过")
+            return
+        }
+        isTransitioning = true
         currentSearchMode = SearchMode.SCREEN_CAPTURE
 
         showSelectOverlay(context) { rect ->

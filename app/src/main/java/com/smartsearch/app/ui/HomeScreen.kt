@@ -8,6 +8,8 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
@@ -128,10 +130,14 @@ class HomeActivity : ComponentActivity() {
                     null // 选区由后续选题框回调传入
                 )
                 Log.d("【SCREEN_RECORD_LOG】", "MediaProjection初始化和VirtualDisplay创建完成")
-                // 第3步：切换到录屏模式，显示选题框
-                FloatWindowManager.showSelectOverlayForScreenCapture(this)
-                Toast.makeText(this, "录屏模式已启动，请框选题目区域", Toast.LENGTH_SHORT).show()
-                Log.d("【SCREEN_RECORD_LOG】", "录屏搜题启动全流程完成")
+                // 第3步：延迟300ms后切换到录屏模式，显示选题框
+                // 延迟原因：部分ROM在MediaProjection+前台服务同步启动瞬间会短暂阻塞顶层窗口渲染，
+                // 延迟创建选区窗口可以有效规避此渲染冲突。
+                Handler(Looper.getMainLooper()).postDelayed({
+                    FloatWindowManager.showSelectOverlayForScreenCapture(this)
+                    Toast.makeText(this, "录屏模式已启动，请框选题目区域", Toast.LENGTH_SHORT).show()
+                    Log.d("【SCREEN_RECORD_LOG】", "录屏搜题启动全流程完成")
+                }, 300)
             } catch (e: Exception) {
                 Log.e("【SCREEN_RECORD_LOG】", "启动录屏服务异常: ${e.message}", e)
                 Toast.makeText(this, "启动录屏失败，已切换到无障碍模式", Toast.LENGTH_LONG).show()
