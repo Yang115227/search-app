@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Rect
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import com.smartsearch.app.feature.search.capture.ScreenCaptureService
 import com.smartsearch.app.feature.search.floatview.AnswerFloatWindow
 import com.smartsearch.app.feature.search.floatview.FloatSelectOverlay
@@ -30,6 +31,55 @@ import com.smartsearch.app.feature.search.floatview.FloatSelectOverlay
  * - 点击关闭按钮退出连续搜题模式，回到悬浮球
  */
 object FloatWindowManager {
+
+    /** 选区持久化存储（SharedPreferences） */
+    object SelectionPrefs {
+        private const val PREFS_NAME = "float_selection"
+        private const val KEY_LEFT = "sel_left"
+        private const val KEY_TOP = "sel_top"
+        private const val KEY_RIGHT = "sel_right"
+        private const val KEY_BOTTOM = "sel_bottom"
+
+        fun save(context: Context, rect: Rect) {
+            try {
+                context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                    .edit()
+                    .putInt(KEY_LEFT, rect.left)
+                    .putInt(KEY_TOP, rect.top)
+                    .putInt(KEY_RIGHT, rect.right)
+                    .putInt(KEY_BOTTOM, rect.bottom)
+                    .apply()
+            } catch (e: Exception) {
+                Log.e("FloatWindowManager", "保存选区失败: ${e.message}", e)
+            }
+        }
+
+        fun load(context: Context): Rect? {
+            try {
+                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                val left = prefs.getInt(KEY_LEFT, -1)
+                val top = prefs.getInt(KEY_TOP, -1)
+                val right = prefs.getInt(KEY_RIGHT, -1)
+                val bottom = prefs.getInt(KEY_BOTTOM, -1)
+                if (left < 0 || top < 0 || right < 0 || bottom < 0) return null
+                return Rect(left, top, right, bottom)
+            } catch (e: Exception) {
+                Log.e("FloatWindowManager", "加载选区失败: ${e.message}", e)
+                return null
+            }
+        }
+
+        fun clear(context: Context) {
+            try {
+                context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                    .edit()
+                    .clear()
+                    .apply()
+            } catch (e: Exception) {
+                Log.e("FloatWindowManager", "清除选区失败: ${e.message}", e)
+            }
+        }
+    }
 
     /** 当前悬浮窗状态 */
     private var currentState = FloatWindowState.IDLE
@@ -141,8 +191,14 @@ object FloatWindowManager {
             currentState == FloatWindowState.CONTINUOUS_SEARCHING) return
 
         selectOverlay = FloatSelectOverlay(ctx).apply {
-            // 恢复上次选区位置（记忆功能）
-            val savedRect = this@FloatWindowManager.lastSelectionRect
+            // 恢复上次选区位置：先从内存加载，内存没有则从持久化存储加载
+            var savedRect = this@FloatWindowManager.lastSelectionRect
+            if (savedRect == null) {
+                savedRect = SelectionPrefs.load(ctx)
+                if (savedRect != null) {
+                    this@FloatWindowManager.lastSelectionRect = savedRect
+                }
+            }
             if (savedRect != null) {
                 setSelectionRect(savedRect)
             }
@@ -154,8 +210,9 @@ object FloatWindowManager {
 
             // 点击"开始搜题" → 进入连续搜题模式
             onStartContinuousSearch = { rect ->
-                // 保存选区
+                // 保存选区（内存 + 持久化）
                 lastSelectionRect = rect
+                SelectionPrefs.save(ctx, rect)
                 // 触发首次搜索
                 this@FloatWindowManager.onRectSelected?.invoke(rect)
                 // 进入连续搜题模式（隐藏选区框，显示底部答案弹窗）
@@ -165,6 +222,7 @@ object FloatWindowManager {
             // 选区变化时更新保存（记忆功能）
             onSelectionChanged = { rect ->
                 lastSelectionRect = rect
+                SelectionPrefs.save(ctx, rect)
                 if (currentState == FloatWindowState.CONTINUOUS_SEARCHING) {
                     this@FloatWindowManager.onContinuousSearch?.invoke(rect)
                 }
@@ -255,14 +313,16 @@ object FloatWindowManager {
                 hideSelectOverlay()
             }
 
-            // 拖拽/缩放时更新选区
+            // 拖拽/缩放时更新选区（内存 + 持久化）
             onSelectionChanged = { rect ->
                 lastSelectionRect = rect
+                SelectionPrefs.save(ctx, rect)
             }
 
             // 调整完成（手指抬起）→ 自动隐藏，触发搜索（仅连续搜题模式）
             onAdjustmentComplete = { rect ->
                 lastSelectionRect = rect
+                SelectionPrefs.save(ctx, rect)
                 // 录屏模式下更新选区并恢复采集
                 if (isContinuous && currentSearchMode == SearchMode.SCREEN_CAPTURE) {
                     ScreenCaptureService.getInstance()?.apply {
@@ -277,6 +337,7 @@ object FloatWindowManager {
             // 非调整模式（ANSWERING）：点击「开始搜题」进入连续搜题
             onStartContinuousSearch = { rect ->
                 lastSelectionRect = rect
+                SelectionPrefs.save(ctx, rect)
                 this@FloatWindowManager.onRectSelected?.invoke(rect)
                 startContinuousSearch(ctx)
             }

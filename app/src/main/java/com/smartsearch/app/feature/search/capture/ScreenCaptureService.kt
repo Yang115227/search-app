@@ -260,7 +260,15 @@ class ScreenCaptureService : Service() {
     override fun onCreate() {
         super.onCreate()
         instance = this
-        mediaProjectionManager = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+        try {
+            mediaProjectionManager = getSystemService(MEDIA_PROJECTION_SERVICE) as? MediaProjectionManager
+            if (mediaProjectionManager == null) {
+                Log.e(TAG, "无法获取 MediaProjectionManager，设备可能不支持录屏")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "获取 MediaProjectionManager 异常: ${e.message}", e)
+            mediaProjectionManager = null
+        }
 
         val metrics = resources.displayMetrics
         screenWidth = metrics.widthPixels
@@ -277,6 +285,11 @@ class ScreenCaptureService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         try {
+            // 任何情况下都确保前台通知已启动（防止系统判定"未在时限内启动前台服务"）
+            if (!isForegroundStarted) {
+                startForegroundNotification()
+            }
+
             if (intent == null) {
                 // 服务被系统重建但无 Intent → 尝试恢复
                 Log.w(TAG, "服务重建，无 Intent 数据")

@@ -152,17 +152,42 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
     }
 
     /**
-     * 恢复之前保存的选区位置。
+     * 恢复之前保存的选区位置，并自动适配屏幕边界。
+     * 如果选区超出屏幕范围，会自动调整到边界内。
      * 用于连续搜题模式下点击「选区」按钮重新唤起选区框时恢复上次选区。
      */
     fun setSelectionRect(rect: android.graphics.Rect) {
+        // 边界适配：确保选区不超出屏幕范围
+        val clampedRect = clampRectToScreen(rect)
         selectionRect.set(
-            rect.left.toFloat(),
-            rect.top.toFloat(),
-            rect.right.toFloat(),
-            rect.bottom.toFloat()
+            clampedRect.left.toFloat(),
+            clampedRect.top.toFloat(),
+            clampedRect.right.toFloat(),
+            clampedRect.bottom.toFloat()
         )
         invalidate()
+    }
+
+    /**
+     * 将矩形限制在屏幕边界内，确保最小尺寸。
+     */
+    private fun clampRectToScreen(rect: android.graphics.Rect): android.graphics.Rect {
+        val minW = (screenWidth * 0.15f).toInt().coerceAtLeast(80)
+        val minH = (screenHeight * 0.10f).toInt().coerceAtLeast(60)
+        var left = rect.left.coerceIn(0, screenWidth - minW)
+        var top = rect.top.coerceIn(0, screenHeight - minH)
+        var right = rect.right.coerceIn(left + minW, screenWidth)
+        var bottom = rect.bottom.coerceIn(top + minH, screenHeight)
+        // 二次调整：如果 right/bottom 超出范围，回拉 left/top
+        if (right > screenWidth) {
+            right = screenWidth
+            left = (right - rect.width()).coerceAtLeast(0)
+        }
+        if (bottom > screenHeight) {
+            bottom = screenHeight
+            top = (bottom - rect.height()).coerceAtLeast(0)
+        }
+        return android.graphics.Rect(left, top, right, bottom)
     }
 
     // ==================== 画笔 ====================
