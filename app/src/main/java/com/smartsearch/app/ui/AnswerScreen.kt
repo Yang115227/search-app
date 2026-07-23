@@ -56,6 +56,7 @@ fun AnswerScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val gson = remember { Gson() }
+    Log.d("【PRACTICE_LOG】", "状态初始化前")
 
     // ── 核心状态 ──
     var questions by remember { mutableStateOf<List<QuestionEntity>>(emptyList()) }
@@ -69,6 +70,7 @@ fun AnswerScreen(
     var startTime by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var isLoading by remember { mutableStateOf(true) }
     var showResetConfirm by remember { mutableStateOf(false) }
+    Log.d("【PRACTICE_LOG】", "状态初始化完成, isLoading=$isLoading")
 
     // ── 加载题目 ──
     LaunchedEffect(subject, mode) {
@@ -290,6 +292,7 @@ fun AnswerScreen(
     }
 
     // ── 主界面 ──
+    Log.d("【PRACTICE_LOG】", "Scaffold 渲染前: isLoading=$isLoading questions.size=${questions.size} showResetConfirm=$showResetConfirm")
     Scaffold(
         topBar = {
             TopAppBar(
@@ -372,6 +375,7 @@ fun AnswerScreen(
             }
         }
     ) { padding ->
+        Log.d("【PRACTICE_LOG】", "Scaffold content 分支判断: isLoading=$isLoading")
         if (isLoading) {
             Box(
                 modifier = Modifier
