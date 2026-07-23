@@ -121,6 +121,26 @@ class ScreenCaptureService : Service() {
          */
         fun isRunning(): Boolean = instance != null
 
+        // ── 事件驱动回调（初始化完成后通知主程序） ──
+
+        /** 录屏初始化成功回调 */
+        private var onCaptureReady: (() -> Unit)? = null
+
+        /** 录屏初始化失败回调 */
+        private var onCaptureFailed: ((String) -> Unit)? = null
+
+        /**
+         * 设置录屏初始化回调（事件驱动，替代时序猜测）。
+         * 必须在调用 setProjection 之前设置。
+         *
+         * @param onReady 初始化成功回调（MediaProjection + VirtualDisplay 创建完成）
+         * @param onFailed 初始化失败回调（参数为错误描述）
+         */
+        fun setCaptureCallbacks(onReady: () -> Unit, onFailed: ((String) -> Unit)? = null) {
+            onCaptureReady = onReady
+            onCaptureFailed = onFailed
+        }
+
         /**
          * 以录屏模式启动搜题。
          *
@@ -363,6 +383,7 @@ class ScreenCaptureService : Service() {
                  * 从授权 Intent 中解析出 MediaProjection，创建 VirtualDisplay 开始采集。
                  */
                 ACTION_SET_PROJECTION -> {
+                    Log.d("【SCREEN_RECORD_LOG】", "① Service收到setProjection指令")
                     val projectionIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                         intent.getParcelableExtra(EXTRA_PROJECTION_INTENT, Intent::class.java)
                     } else {
@@ -528,6 +549,11 @@ class ScreenCaptureService : Service() {
                 PaddleOCREngine.init(this)
                 if (!PaddleOCREngine.isReady()) {
                     Log.e(TAG, "PaddleOCR 引擎初始化失败")
+                    mainHandler.post {
+                        onCaptureFailed?.invoke("OCR引擎初始化失败")
+                        onCaptureReady = null
+                        onCaptureFailed = null
+                    }
                     try {
                         FloatWindowManager.showAnswerWindow(
                             this,
@@ -542,9 +568,15 @@ class ScreenCaptureService : Service() {
             }
 
             // 使用 ScreenCaptureManager 创建 MediaProjection（自动销毁旧实例）
+            Log.d("【SCREEN_RECORD_LOG】", "② 开始初始化MediaProjection")
             mediaProjection = ScreenCaptureManager.createMediaProjection(this, projectionIntent)
             if (mediaProjection == null) {
                 Log.e(TAG, "无法获取 MediaProjection")
+                mainHandler.post {
+                    onCaptureFailed?.invoke("MediaProjection 创建失败")
+                    onCaptureReady = null
+                    onCaptureFailed = null
+                }
                 switchToAccessibilityMode()
                 stopSelf()
                 return
@@ -585,6 +617,11 @@ class ScreenCaptureService : Service() {
             )
             if (imageReader == null) {
                 Log.e(TAG, "无法创建 VirtualDisplay/ImageReader")
+                mainHandler.post {
+                    onCaptureFailed?.invoke("VirtualDisplay 创建失败")
+                    onCaptureReady = null
+                    onCaptureFailed = null
+                }
                 switchToAccessibilityMode()
                 stopSelf()
                 return
@@ -595,9 +632,23 @@ class ScreenCaptureService : Service() {
 
             isCapturing = true
             blackFrameCount = 0
-            Log.d(TAG, "录屏采集已启动")
+            Log.d("【SCREEN_RECORD_LOG】", "③ VirtualDisplay创建成功, 录屏采集已启动")
+
+            // ── 事件驱动通知：初始化完成，通知主程序创建选区悬浮窗 ──
+            mainHandler.post {
+                Log.d("【SCREEN_RECORD_LOG】", "Service初始化完成，通知主程序")
+                onCaptureReady?.invoke()
+                onCaptureReady = null
+                onCaptureFailed = null
+            }
         } catch (e: Exception) {
             Log.e(TAG, "startCapture 异常: ${e.message}", e)
+            // 通知主程序初始化失败
+            mainHandler.post {
+                onCaptureFailed?.invoke("startCapture异常: ${e.message}")
+                onCaptureReady = null
+                onCaptureFailed = null
+            }
             // 确保前台通知已发出
             if (!isForegroundStarted) {
                 try { startForegroundNotification() } catch (_: Exception) { }

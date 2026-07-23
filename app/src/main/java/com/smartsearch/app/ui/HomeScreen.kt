@@ -110,6 +110,9 @@ class HomeActivity : ComponentActivity() {
     /** 标记是否正在等待悬浮窗权限授权（从设置页返回后自动检测） */
     private var pendingOverlayPermission = false
 
+    /** 录屏初始化超时 Runnable（用于取消） */
+    private var captureInitTimeout: Runnable? = null
+
     /** 录屏授权结果回调 */
     private val screenCaptureLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -123,23 +126,22 @@ class HomeActivity : ComponentActivity() {
                 // 第1步：启动前台服务（通知栏显示"录屏搜题运行中"）
                 ScreenCaptureService.startForegroundOnly(this)
                 Log.d("【SCREEN_RECORD_LOG】", "前台服务已启动，开始发送投影Intent")
-                // 第2步：将授权Intent发送给录屏服务，创建MediaProjection
-                ScreenCaptureService.setProjection(
-                    this,
-                    result.data!!,
-                    null // 选区由后续选题框回调传入
-                )
-                Log.d("【SCREEN_RECORD_LOG】", "setProjection Intent已发送，等待Service初始化完成")
 
-                // 第3步：强制切换到主线程执行后续UI逻辑（核心修复）
-                // 原因：startForegroundService/setProjection 通过Intent触发Service的onStartCommand，
-                // onStartCommand 在当前主线程消息处理完成后才执行。通过 Handler.post 将后续代码
-                // 调度到主线程消息队列末尾，确保 Service 的 VirtualDisplay 初始化完成后再执行。
-                Handler(Looper.getMainLooper()).post(Runnable {
-                    try {
-                        // 第4步：额外延迟200ms，避免VirtualDisplay初始化与悬浮窗创建同时抢占渲染资源
-                        Handler(Looper.getMainLooper()).postDelayed({
+                // ── 第2步：设置初始化回调（事件驱动，替代时序猜测） ──
+                // 录屏服务内部完成 MediaProjection + VirtualDisplay 初始化后，
+                // 主动通过此回调通知主程序，避免时序猜测/阻塞等待。
+                ScreenCaptureService.setCaptureCallbacks(
+                    onReady = {
+                        // 回调已运行在主线程（Service.mainHandler.post），
+                        // 额外 post 确保绝对在主线程执行
+                        Handler(Looper.getMainLooper()).post {
                             try {
+                                // 取消超时计时器
+                                captureInitTimeout?.let {
+                                    Handler(Looper.getMainLooper()).removeCallbacks(it)
+                                }
+                                captureInitTimeout = null
+
                                 Log.d("【SCREEN_RECORD_LOG】", "准备调用showSelectOverlay")
                                 FloatWindowManager.showSelectOverlayForScreenCapture(this)
                                 Toast.makeText(this, "录屏模式已启动，请框选题目区域", Toast.LENGTH_SHORT).show()
@@ -147,16 +149,40 @@ class HomeActivity : ComponentActivity() {
                             } catch (e: Exception) {
                                 Log.e("【SCREEN_RECORD_LOG】", "showSelectOverlay 异常: ${e.message}", e)
                                 Toast.makeText(this, "启动录屏搜题失败，已切换到无障碍模式", Toast.LENGTH_LONG).show()
-                                // 降级到无障碍模式
                                 try { startAccessibilitySearch() } catch (_: Exception) { }
                             }
-                        }, 200)
-                    } catch (e: Exception) {
-                        Log.e("【SCREEN_RECORD_LOG】", "主线程调度Runnable异常: ${e.message}", e)
-                        Toast.makeText(this, "启动录屏搜题失败", Toast.LENGTH_LONG).show()
-                        try { startAccessibilitySearch() } catch (_: Exception) { }
+                        }
+                    },
+                    onFailed = { errorMsg ->
+                        Handler(Looper.getMainLooper()).post {
+                            Log.e("【SCREEN_RECORD_LOG】", "录屏服务初始化失败: $errorMsg")
+                            Toast.makeText(this, "录屏启动失败: $errorMsg", Toast.LENGTH_LONG).show()
+                            try { startAccessibilitySearch() } catch (_: Exception) { }
+                        }
                     }
-                })
+                )
+
+                // 第3步：将授权Intent发送给录屏服务，创建MediaProjection
+                ScreenCaptureService.setProjection(
+                    this,
+                    result.data!!,
+                    null // 选区由后续选题框回调传入
+                )
+                Log.d("【SCREEN_RECORD_LOG】", "setProjection Intent已发送，等待Service初始化回调")
+
+                // 第4步：3秒超时保护
+                // 如果 Service 初始化未在 3 秒内完成回调，打印超时日志并释放资源
+                val timeoutRunnable = Runnable {
+                    Log.e("【SCREEN_RECORD_LOG】", "录屏服务初始化超时(3s)，释放资源并降级")
+                    // 先清理屏幕录制资源
+                    try {
+                        ScreenCaptureService.getInstance()?.stopCapture()
+                    } catch (_: Exception) { }
+                    Toast.makeText(this, "录屏启动超时，请重试", Toast.LENGTH_LONG).show()
+                    try { startAccessibilitySearch() } catch (_: Exception) { }
+                }
+                captureInitTimeout = timeoutRunnable
+                Handler(Looper.getMainLooper()).postDelayed(timeoutRunnable, 3000)
             } catch (e: Exception) {
                 Log.e("【SCREEN_RECORD_LOG】", "启动录屏服务异常: ${e.message}", e)
                 Toast.makeText(this, "启动录屏失败，已切换到无障碍模式", Toast.LENGTH_LONG).show()
