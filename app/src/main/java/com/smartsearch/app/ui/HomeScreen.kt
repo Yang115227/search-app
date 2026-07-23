@@ -109,9 +109,11 @@ class HomeActivity : ComponentActivity() {
             }
         } else {
             // 用户拒绝 → 停止已启动的前台服务
-            android.content.Intent(this, ScreenCaptureService::class.java).also { stopIntent ->
-                stopIntent.action = "com.smartsearch.app.action.STOP_CAPTURE"
-                startService(stopIntent)
+            try {
+                val stopIntent = android.content.Intent(this, ScreenCaptureService::class.java)
+                stopService(stopIntent)
+            } catch (e: Exception) {
+                Log.e(TAG, "停止录屏服务异常: ${e.message}", e)
             }
             Toast.makeText(this, "录屏权限未授权", Toast.LENGTH_SHORT).show()
         }
@@ -420,28 +422,39 @@ class HomeActivity : ComponentActivity() {
      * 第 4 步：授权回调中发送 Intent 给已启动的服务
      */
     private fun startScreenCaptureSearch() {
-        // 切换悬浮球模式为录屏
-        FloatingWindowService.switchMode(FloatWindowManager.SearchMode.SCREEN_CAPTURE)
+        try {
+            // 切换悬浮球模式为录屏
+            FloatingWindowService.switchMode(FloatWindowManager.SearchMode.SCREEN_CAPTURE)
 
-        // 先清理所有悬浮窗状态（防止之前悬浮球残留的 SELECTING 状态）
-        FloatWindowManager.destroyAll()
+            // 先清理所有悬浮窗状态（防止之前悬浮球残留的 SELECTING 状态）
+            FloatWindowManager.destroyAll()
 
-        // 第 1 步：悬浮窗权限
-        val floatingStatus = PermissionManager.checkFloatingWindow(this)
-        if (floatingStatus != PermissionManager.PermissionStatus.GRANTED) {
-            showPermissionGuide("floating_window")
-            startActivity(PermissionManager.getFloatingWindowSettingsIntent(this))
-            return
+            // 第 1 步：悬浮窗权限
+            val floatingStatus = PermissionManager.checkFloatingWindow(this)
+            if (floatingStatus != PermissionManager.PermissionStatus.GRANTED) {
+                showPermissionGuide("floating_window")
+                startActivity(PermissionManager.getFloatingWindowSettingsIntent(this))
+                return
+            }
+
+            // 第 2 步：启动前台服务（通知栏显示"录屏搜题运行中"）
+            ScreenCaptureService.startForegroundOnly(this)
+
+            // 第 3 步：弹出系统录屏权限对话框
+            val projectionManager = getSystemService(
+                android.content.Context.MEDIA_PROJECTION_SERVICE
+            ) as android.media.projection.MediaProjectionManager
+            screenCaptureLauncher.launch(projectionManager.createScreenCaptureIntent())
+        } catch (e: Exception) {
+            Log.e(TAG, "启动录屏搜题异常: ${e.message}", e)
+            Toast.makeText(this, "启动录屏搜题失败，请重试", Toast.LENGTH_LONG).show()
+            // 降级到无障碍模式
+            try {
+                startAccessibilitySearch()
+            } catch (e2: Exception) {
+                Log.e(TAG, "降级到无障碍模式也失败: ${e2.message}", e2)
+            }
         }
-
-        // 第 2 步：启动前台服务（通知栏显示"录屏搜题运行中"）
-        ScreenCaptureService.startForegroundOnly(this)
-
-        // 第 3 步：弹出系统录屏权限对话框
-        val projectionManager = getSystemService(
-            android.content.Context.MEDIA_PROJECTION_SERVICE
-        ) as android.media.projection.MediaProjectionManager
-        screenCaptureLauncher.launch(projectionManager.createScreenCaptureIntent())
     }
 
     // ==================== 相机扫描搜题 ====================

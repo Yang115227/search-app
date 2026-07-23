@@ -71,49 +71,34 @@ fun QuestionBankManageScreen(
 
     // ==================== 数据加载 ====================
 
-    /**
-     * 加载题库数据，包含异常捕获。
-     * 加载完成后自动清理已不存在的选中项。
-     */
-    fun loadData() {
-        scope.launch {
-            isLoading = true
-            try {
-                val db = QuizDatabase.getInstance(context)
-                var loadedItems = emptyList<SubjectManageItem>()
-                var allCount = 0
-                withContext(Dispatchers.IO) {
-                    try {
-                        val allSubjects = db.questionDao().getAllSubjects()
-                        loadedItems = allSubjects.map { subject ->
-                            SubjectManageItem(subject, db.questionDao().getCountBySubject(subject))
-                        }
-                        allCount = db.questionDao().getCount()
-                    } catch (e: Exception) {
-                        Log.e("QuestionBankManage", "数据库查询异常: ${e.message}", e)
-                    }
-                }
-                // 状态修改必须在主线程
-                subjects = loadedItems
-                totalCount = allCount
-                // 清理已不存在的选中项
-                val validSubjects = loadedItems.map { it.subject }.toSet()
-                selectedSubjects = selectedSubjects.filter { it in validSubjects }.toSet()
-                isLoading = false
-            } catch (e: Exception) {
-                Log.e("QuestionBankManage", "加载题库数据异常: ${e.message}", e)
-                Toast.makeText(context, "加载题库数据失败: ${e.message}", Toast.LENGTH_SHORT).show()
-                isLoading = false
-            }
-        }
-    }
-
     // refreshTrigger 或 refreshKey 变化时重新加载数据（覆盖初始加载和操作后的刷新）
     LaunchedEffect(refreshTrigger, refreshKey) {
+        isLoading = true
         try {
-            loadData()
+            val db = QuizDatabase.getInstance(context)
+            var loadedItems = emptyList<SubjectManageItem>()
+            var allCount = 0
+            withContext(Dispatchers.IO) {
+                try {
+                    val allSubjects = db.questionDao().getAllSubjects()
+                    loadedItems = allSubjects.map { subject ->
+                        SubjectManageItem(subject, db.questionDao().getCountBySubject(subject))
+                    }
+                    allCount = db.questionDao().getCount()
+                } catch (e: Exception) {
+                    Log.e("QuestionBankManage", "数据库查询异常: ${e.message}", e)
+                }
+            }
+            subjects = loadedItems
+            totalCount = allCount
+            // 清理已不存在的选中项
+            val validSubjects = loadedItems.map { it.subject }.toSet()
+            selectedSubjects = selectedSubjects.filter { it in validSubjects }.toSet()
         } catch (e: Exception) {
-            Log.e("QuestionBankManage", "LaunchedEffect 加载数据异常: ${e.message}", e)
+            Log.e("QuestionBankManage", "加载题库数据异常: ${e.message}", e)
+            Toast.makeText(context, "加载题库数据失败: ${e.message}", Toast.LENGTH_SHORT).show()
+        } finally {
+            isLoading = false
         }
     }
 

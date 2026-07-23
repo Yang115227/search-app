@@ -141,6 +141,12 @@ object FloatWindowManager {
             currentState == FloatWindowState.CONTINUOUS_SEARCHING) return
 
         selectOverlay = FloatSelectOverlay(ctx).apply {
+            // 恢复上次选区位置（记忆功能）
+            val savedRect = this@FloatWindowManager.lastSelectionRect
+            if (savedRect != null) {
+                setSelectionRect(savedRect)
+            }
+
             // 点击 X 关闭按钮 → 销毁
             onDismiss = {
                 destroyAll()
@@ -351,8 +357,9 @@ object FloatWindowManager {
                 // 录屏模式下停止录屏服务
                 if (currentSearchMode == SearchMode.SCREEN_CAPTURE || ScreenCaptureService.isRunning()) {
                     try {
-                        val stopIntent = android.content.Intent(ctx, ScreenCaptureService::class.java)
-                        ctx.stopService(stopIntent)
+                        val stopCtx = appContext ?: ctx
+                        val stopIntent = android.content.Intent(stopCtx, ScreenCaptureService::class.java)
+                        stopCtx.stopService(stopIntent)
                     } catch (e: Exception) {
                         ScreenCaptureService.getInstance()?.stopCapture()
                     }
@@ -484,8 +491,14 @@ object FloatWindowManager {
         // 录屏模式下停止录屏服务
         if (wasScreenCapture) {
             try {
-                val stopIntent = android.content.Intent(appContext, ScreenCaptureService::class.java)
-                appContext?.stopService(stopIntent)
+                val ctx = appContext
+                if (ctx != null) {
+                    val stopIntent = android.content.Intent(ctx, ScreenCaptureService::class.java)
+                    ctx.stopService(stopIntent)
+                } else {
+                    // appContext 为 null 时直接调用 stopCapture
+                    ScreenCaptureService.getInstance()?.stopCapture()
+                }
             } catch (e: Exception) {
                 ScreenCaptureService.getInstance()?.stopCapture()
             }
