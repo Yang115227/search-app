@@ -730,7 +730,7 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
         try {
             windowManager.addView(this, params)
             isAttached = true
-            Log.d("【SELECT_LOG】", "attachToWindow: addView 成功, screen=${screenWidth}x${screenHeight}")
+            Log.d("【SELECT_LOG】", "attachToWindow: addView 成功, screen=${screenWidth}x${screenHeight}, windowType=${params.type} (TYPE_APPLICATION_OVERLAY=${WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY})")
             // addView 后立即触发重绘，确保 onDraw 在下一次布局循环中被调用
             invalidate()
             // 跨线程重绘兜底：确保即使主线程繁忙也能触发绘制

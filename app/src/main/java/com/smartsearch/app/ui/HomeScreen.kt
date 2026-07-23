@@ -105,6 +105,9 @@ class HomeActivity : ComponentActivity() {
     /** 录屏授权超时标记 */
     private var screenCaptureTimedOut = false
 
+    /** 标记是否正在等待悬浮窗权限授权（从设置页返回后自动检测） */
+    private var pendingOverlayPermission = false
+
     /** 录屏授权结果回调 */
     private val screenCaptureLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -394,6 +397,24 @@ class HomeActivity : ComponentActivity() {
         }
     }
 
+    // ==================== 生命周期监听 ====================
+
+    override fun onResume() {
+        super.onResume()
+        // 从悬浮窗设置页面返回时自动检测权限
+        if (pendingOverlayPermission) {
+            pendingOverlayPermission = false
+            Log.d("【SCREEN_RECORD_LOG】", "onResume: 检测到从悬浮窗设置页面返回")
+            if (PermissionManager.checkFloatingWindow(this) == PermissionManager.PermissionStatus.GRANTED) {
+                Log.d("【SCREEN_RECORD_LOG】", "悬浮窗权限已授权, 继续执行录屏流程")
+                continueScreenCaptureAfterOverlayPermission()
+            } else {
+                Log.w("【SCREEN_RECORD_LOG】", "悬浮窗权限仍未授权, 停止录屏流程")
+                Toast.makeText(this, "请先开启悬浮窗权限后再试", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
     // ==================== 日志导出 ====================
 
     /**
@@ -450,11 +471,13 @@ class HomeActivity : ComponentActivity() {
     /**
      * 录屏搜题启动流程。
      *
-     * 第 1 步：校验通知权限（Android 13+）
-     * 第 2 步：校验悬浮窗权限
-     * 第 3 步：启动前台服务（通知栏可见）
-     * 第 4 步：弹出系统录屏权限对话框
-     * 第 5 步：授权回调中发送 Intent 给已启动的服务
+     * 执行顺序：
+     * 第 1 步：校验悬浮窗权限（优先于其他权限，确保系统允许创建叠加窗口）
+     *   - 未授权 → 跳转系统悬浮窗设置页，onResume 自动检测返回后继续
+     * 第 2 步：校验通知权限（Android 13+）
+     * 第 3 步：弹出系统录屏权限对话框
+     * 第 4 步：授权回调中启动前台服务+初始化MediaProjection
+     * 第 5 步：权限全部就绪后调用 showSelectOverlay 创建选区窗口
      */
     private fun startScreenCaptureSearch() {
         Log.d("【SCREEN_RECORD_LOG】", "startScreenCaptureSearch 入口: SDK=${Build.VERSION.SDK_INT} TIRAMISU=${Build.VERSION_CODES.TIRAMISU}")
@@ -466,35 +489,19 @@ class HomeActivity : ComponentActivity() {
             // 先清理所有悬浮窗状态（防止之前悬浮球残留的 SELECTING 状态）
             FloatWindowManager.destroyAll()
 
-            // 第 1 步：校验通知权限（Android 13+）
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                val notifPerm = ContextCompat.checkSelfPermission(
-                    this, Manifest.permission.POST_NOTIFICATIONS
-                )
-                Log.d("【SCREEN_RECORD_LOG】", "通知权限状态: $notifPerm (GRANTED=${PackageManager.PERMISSION_GRANTED})")
-                if (notifPerm != PackageManager.PERMISSION_GRANTED) {
-                    Log.d("【SCREEN_RECORD_LOG】", "通知权限未授权, 发起权限请求")
-                    showPermissionGuide("notification")
-                    notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                    return
-                }
-                Log.d("【SCREEN_RECORD_LOG】", "通知权限已授权")
-            } else {
-                Log.d("【SCREEN_RECORD_LOG】", "Android 13以下, 跳过通知权限检查")
-            }
-
-            // 第 2 步：悬浮窗权限
+            // ── 第 1 步：校验悬浮窗权限（优先于其他所有权限） ──
             val floatingStatus = PermissionManager.checkFloatingWindow(this)
             Log.d("【SCREEN_RECORD_LOG】", "悬浮窗权限状态: $floatingStatus")
             if (floatingStatus != PermissionManager.PermissionStatus.GRANTED) {
                 Log.d("【SCREEN_RECORD_LOG】", "悬浮窗权限未授权, 引导开启")
                 showPermissionGuide("floating_window")
+                pendingOverlayPermission = true
                 startActivity(PermissionManager.getFloatingWindowSettingsIntent(this))
                 return
             }
 
-            Log.d("【SCREEN_RECORD_LOG】", "所有权限已通过, 执行录屏流程")
-            doScreenCaptureSearch()
+            // 第 2 步：继续后续权限校验（通知权限 → 录屏授权）
+            continueScreenCaptureAfterOverlayPermission()
         } catch (e: Exception) {
             Log.e("【SCREEN_RECORD_LOG】", "startScreenCaptureSearch 异常: ${e.message}", e)
             Toast.makeText(this, "启动录屏搜题失败，请重试", Toast.LENGTH_LONG).show()
@@ -505,6 +512,36 @@ class HomeActivity : ComponentActivity() {
                 Log.e("【SCREEN_RECORD_LOG】", "降级到无障碍模式也失败: ${e2.message}", e2)
             }
         }
+    }
+
+    /**
+     * 悬浮窗权限已确认后，继续后续权限校验流程。
+     *
+     * 第 2 步：校验通知权限（Android 13+）
+     * 第 3 步：所有权限就绪后执行录屏授权
+     */
+    private fun continueScreenCaptureAfterOverlayPermission() {
+        Log.d("【SCREEN_RECORD_LOG】", "continueScreenCaptureAfterOverlayPermission 入口")
+        // 第 2 步：校验通知权限（Android 13+）
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val notifPerm = ContextCompat.checkSelfPermission(
+                this, Manifest.permission.POST_NOTIFICATIONS
+            )
+            Log.d("【SCREEN_RECORD_LOG】", "通知权限状态: $notifPerm (GRANTED=${PackageManager.PERMISSION_GRANTED})")
+            if (notifPerm != PackageManager.PERMISSION_GRANTED) {
+                Log.d("【SCREEN_RECORD_LOG】", "通知权限未授权, 发起权限请求")
+                showPermissionGuide("notification")
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                return
+            }
+            Log.d("【SCREEN_RECORD_LOG】", "通知权限已授权")
+        } else {
+            Log.d("【SCREEN_RECORD_LOG】", "Android 13以下, 跳过通知权限检查")
+        }
+
+        // 第 3 步：所有权限已通过，执行录屏授权
+        Log.d("【SCREEN_RECORD_LOG】", "所有权限已通过, 执行录屏流程")
+        doScreenCaptureSearch()
     }
 
     /**
