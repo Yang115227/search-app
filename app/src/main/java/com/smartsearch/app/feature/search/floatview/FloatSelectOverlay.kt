@@ -13,6 +13,7 @@ import android.text.TextPaint
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
+import android.util.Log
 import android.view.WindowManager
 import com.smartsearch.app.core.utils.RectUtil
 

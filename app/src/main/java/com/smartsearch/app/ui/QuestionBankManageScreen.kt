@@ -82,8 +82,9 @@ fun QuestionBankManageScreen(
         try {
             // 数据库初始化可能在 IO 线程失败，捕获后展示占位页
             val db = try {
-                QuizDatabase.getInstance(context)
-                Log.d("【DB_LOG】", "QuizDatabase 初始化成功")
+                QuizDatabase.getInstance(context).also {
+                    Log.d("【DB_LOG】", "QuizDatabase 初始化成功")
+                }
             } catch (e: Exception) {
                 Log.e("【DB_LOG】", "数据库初始化异常: ${e.message}", e)
                 dbInitFailed = true
