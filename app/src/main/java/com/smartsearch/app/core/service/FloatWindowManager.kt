@@ -272,6 +272,18 @@ object FloatWindowManager {
     /** 是否正在过渡中（防止并发重复创建，例如录屏授权回调+300ms延迟期间重复调用） */
     private var isTransitioning = false
 
+    /**
+     * 当前持有选区的模式（用于模式切换隔离检测）。
+     * - null：无选区
+     * - ACCESSIBILITY：无障碍模式持有
+     * - SCREEN_CAPTURE：录屏模式持有
+     * 当切换到新模式时，若 activeMode 与新模式不同，强制销毁旧选区再创建新实例。
+     */
+    private var activeMode: SearchMode? = null
+
+    /** 销毁旧选区后等待 onDetachedFromWindow 的延迟（毫秒） */
+    private val MODE_SWITCH_DELAY_MS = 100L
+
     // ── 悬浮窗实例 ──
     private var selectOverlay: FloatSelectOverlay? = null
     private var answerWindow: AnswerFloatWindow? = null
@@ -365,7 +377,14 @@ object FloatWindowManager {
      */
     fun showSelectOverlay(context: Context, onSearch: (Rect) -> Unit) {
         val ctx = context.applicationContext
-        Log.d("【SELECT_LOG】", "showSelectOverlay 入口: mode=${currentSearchMode} state=${currentState}")
+        Log.d("【SELECT_LOG】", "showSelectOverlay 入口: mode=${currentSearchMode} state=${currentState} activeMode=${activeMode}")
+
+        // ── 模式切换检测：如果当前选区属于不同模式，强制销毁旧选区再创建新实例 ──
+        if (activeMode != null && activeMode != currentSearchMode) {
+            Log.d("【SELECT_LOG】", "showSelectOverlay: 检测到模式切换(${activeMode}→${currentSearchMode}), 强制销毁旧选区")
+            forceDestroyCurrentOverlay()
+        }
+
         // 缓存回调
         this.onRectSelected = onSearch
         this.onContinuousSearch = onSearch
@@ -375,7 +394,7 @@ object FloatWindowManager {
             destroyAnswerWindow()
         }
 
-        // 如果已有选题框，不重复创建
+        // 如果已有选题框且模式匹配，不重复创建
         if (currentState == FloatWindowState.SELECTING ||
             currentState == FloatWindowState.CONTINUOUS_SEARCHING) {
             Log.d("【SELECT_LOG】", "showSelectOverlay: 已有选题框, 跳过创建")
@@ -442,8 +461,9 @@ object FloatWindowManager {
         }
 
         currentState = FloatWindowState.SELECTING
+        activeMode = currentSearchMode // 记录当前选区归属模式
         isTransitioning = false
-        Log.d("【SELECT_LOG】", "showSelectOverlay: 状态机 SELECTING, isTransitioning=false")
+        Log.d("【SELECT_LOG】", "showSelectOverlay: 状态机 SELECTING, activeMode=${activeMode}, isTransitioning=false")
     }
 
     // ==================== 连续搜题模式 ====================
@@ -482,8 +502,10 @@ object FloatWindowManager {
      * 选区位置已保存在 lastSelectionRect 中。
      */
     private fun hideSelectOverlay() {
+        Log.d("【SELECT_LOG】", "hideSelectOverlay: 移除选区, activeMode=${activeMode}→null")
         selectOverlay?.detachFromWindow()
         selectOverlay = null
+        activeMode = null
     }
 
     /**
@@ -498,6 +520,14 @@ object FloatWindowManager {
 
         val ctx = context.applicationContext
         val isContinuous = currentState == FloatWindowState.CONTINUOUS_SEARCHING
+
+        Log.d("【SELECT_LOG】", "showOverlayForAdjustment: 入口 state=${currentState} isContinuous=${isContinuous} activeMode=${activeMode} currentSearchMode=${currentSearchMode}")
+
+        // ── 模式切换检测：如果当前 selectOverlay 属于不同模式，强制销毁旧选区 ──
+        if (activeMode != null && activeMode != currentSearchMode) {
+            Log.d("【SELECT_LOG】", "showOverlayForAdjustment: 检测到模式切换(${activeMode}→${currentSearchMode}), 强制销毁旧选区")
+            forceDestroyCurrentOverlay()
+        }
 
         // 录屏模式下暂停连续采集（选区调整中）
         if (isContinuous && currentSearchMode == SearchMode.SCREEN_CAPTURE) {
@@ -555,6 +585,8 @@ object FloatWindowManager {
 
             // 附加到窗口
             attachToWindow()
+            Log.d("【SELECT_LOG】", "showOverlayForAdjustment: attachToWindow 完成, 设置 activeMode=${currentSearchMode}")
+            activeMode = currentSearchMode
         }
     }
 
@@ -668,11 +700,20 @@ object FloatWindowManager {
             Log.d("【SELECT_LOG】", "showSelectOverlayForScreenCapture: 正在过渡中, 跳过")
             return
         }
+
+        // ── 模式切换检测：如果当前选区属于无障碍模式，强制销毁旧选区 ──
+        if (activeMode != null && activeMode != SearchMode.SCREEN_CAPTURE) {
+            Log.d("【SELECT_LOG】", "showSelectOverlayForScreenCapture: 检测到模式切换(${activeMode}→SCREEN_CAPTURE), 强制销毁旧选区, state=${currentState}")
+            forceDestroyCurrentOverlay()
+        }
+
+        // 如果已有录屏选题框，不重复创建
         if (currentState == FloatWindowState.SELECTING ||
             currentState == FloatWindowState.CONTINUOUS_SEARCHING) {
-            Log.d("【SELECT_LOG】", "showSelectOverlayForScreenCapture: 已有选题框, 跳过")
+            Log.d("【SELECT_LOG】", "showSelectOverlayForScreenCapture: 已有录屏选题框, 跳过, state=${currentState} activeMode=${activeMode}")
             return
         }
+
         isTransitioning = true
         currentSearchMode = SearchMode.SCREEN_CAPTURE
 
@@ -728,14 +769,34 @@ object FloatWindowManager {
     // ==================== 销毁逻辑 ====================
 
     /**
+     * 强制销毁当前选区（模式切换时调用）。
+     * destroySelectOverlay 内部的 detachFromWindow → removeView 会同步触发
+     * onDetachedFromWindow，无需额外等待。
+     * 不重置 currentSearchMode，由调用方设置新模式。
+     */
+    private fun forceDestroyCurrentOverlay() {
+        Log.d("【SELECT_LOG】", "forceDestroyCurrentOverlay: 强制销毁当前选区, activeMode=${activeMode}, state=${currentState}")
+        stopContinuousSearch()
+        destroySelectOverlay()
+        // 清除当前模式回调，防止旧回调污染新模式
+        onRectSelected = null
+        onContinuousSearch = null
+        lastSelectionRect = null
+        Log.d("【SELECT_LOG】", "forceDestroyCurrentOverlay: 旧选区已销毁完毕, activeMode=${activeMode}, state=${currentState}")
+    }
+
+    /**
      * 仅销毁选题框。
      */
     private fun destroySelectOverlay() {
+        Log.d("【SELECT_LOG】", "destroySelectOverlay: 销毁选区, activeMode=${activeMode}→null, state=${currentState}")
         selectOverlay?.detachFromWindow()
         selectOverlay = null
+        activeMode = null
         if (currentState == FloatWindowState.SELECTING ||
             currentState == FloatWindowState.CONTINUOUS_SEARCHING
         ) {
+            Log.d("【SELECT_LOG】", "destroySelectOverlay: 状态机 IDLE (was ${currentState})")
             currentState = FloatWindowState.IDLE
         }
     }
@@ -758,6 +819,7 @@ object FloatWindowManager {
      * 在录屏模式下，同时停止 ScreenCaptureService。
      */
     fun destroyAll() {
+        Log.d("【SELECT_LOG】", "destroyAll: 销毁所有悬浮窗, activeMode=${activeMode}, state=${currentState}, mode=${currentSearchMode}")
         stopContinuousSearch()
         destroySelectOverlay()
         destroyAnswerWindow()
@@ -765,6 +827,7 @@ object FloatWindowManager {
         onAnswerDismissed = null
         onContinuousSearch = null
         lastSelectionRect = null
+        activeMode = null
 
         // 先保存当前模式，再重置
         val wasScreenCapture = currentSearchMode == SearchMode.SCREEN_CAPTURE || ScreenCaptureService.isRunning()
