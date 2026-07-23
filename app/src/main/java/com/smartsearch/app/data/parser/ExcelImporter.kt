@@ -346,7 +346,7 @@ object ExcelImporter {
 
         // 如果没有找到"题干"列，但找到了其他列，记录警告但仍使用表头映射
         if (!mapping.values.contains(ColumnType.QUESTION)) {
-            Log.w(TAG, "表头中未找到'题干'列，将根据已识别的列映射读取（缺少"题干"时题干字段将为空）")
+            Log.w(TAG, "表头中未找到'题干'列，将根据已识别的列映射读取（缺少'题干'时题干字段将为空）")
         }
 
         return mapping
