@@ -102,24 +102,33 @@ class HomeActivity : ComponentActivity() {
         }
     }
 
+    /** 录屏授权超时标记 */
+    private var screenCaptureTimedOut = false
+
     /** 录屏授权结果回调 */
     private val screenCaptureLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
+        screenCaptureTimedOut = false // 收到回调，取消超时标记
         Log.d("【SCREEN_RECORD_LOG】", "screenCaptureLauncher 回调: resultCode=${result.resultCode} (RESULT_OK=${Activity.RESULT_OK}) data=${result.data != null}")
         // 严格判断 resultCode：必须等于 RESULT_OK
         if (result.resultCode == Activity.RESULT_OK && result.data != null) {
             try {
-                Log.d("【SCREEN_RECORD_LOG】", "录屏授权成功, 开始启动录屏服务")
-                // 授权成功 → 将 Intent 发送给已启动的前台服务
+                Log.d("【SCREEN_RECORD_LOG】", "录屏授权成功(resultCode=RESULT_OK), 开始启动前台服务+初始化MediaProjection")
+                // 第1步：启动前台服务（通知栏显示"录屏搜题运行中"）
+                ScreenCaptureService.startForegroundOnly(this)
+                Log.d("【SCREEN_RECORD_LOG】", "前台服务已启动，开始发送投影Intent")
+                // 第2步：将授权Intent发送给录屏服务，创建MediaProjection
                 ScreenCaptureService.setProjection(
                     this,
                     result.data!!,
                     null // 选区由后续选题框回调传入
                 )
-                // 切换到录屏模式，显示选题框
+                Log.d("【SCREEN_RECORD_LOG】", "MediaProjection初始化和VirtualDisplay创建完成")
+                // 第3步：切换到录屏模式，显示选题框
                 FloatWindowManager.showSelectOverlayForScreenCapture(this)
                 Toast.makeText(this, "录屏模式已启动，请框选题目区域", Toast.LENGTH_SHORT).show()
+                Log.d("【SCREEN_RECORD_LOG】", "录屏搜题启动全流程完成")
             } catch (e: Exception) {
                 Log.e("【SCREEN_RECORD_LOG】", "启动录屏服务异常: ${e.message}", e)
                 Toast.makeText(this, "启动录屏失败，已切换到无障碍模式", Toast.LENGTH_LONG).show()
@@ -127,14 +136,8 @@ class HomeActivity : ComponentActivity() {
                 try { startAccessibilitySearch() } catch (_: Exception) { }
             }
         } else {
-            // 用户拒绝或取消 → 停止已启动的前台服务，弹窗提示
-            Log.w("【SCREEN_RECORD_LOG】", "录屏授权被拒绝或取消, resultCode=${result.resultCode}, 停止服务")
-            try {
-                val stopIntent = android.content.Intent(this, ScreenCaptureService::class.java)
-                stopService(stopIntent)
-            } catch (e: Exception) {
-                Log.e("【SCREEN_RECORD_LOG】", "停止录屏服务异常: ${e.message}", e)
-            }
+            // 用户拒绝或取消 → 无需停止服务（服务尚未启动），弹窗提示
+            Log.w("【SCREEN_RECORD_LOG】", "录屏授权被拒绝或取消, resultCode=${result.resultCode}, 跳过服务启动")
             // 用户拒绝授权，弹窗提示而非静默处理
             Toast.makeText(this, "录屏权限未授权，无法使用录屏搜题", Toast.LENGTH_LONG).show()
         }
@@ -506,9 +509,8 @@ class HomeActivity : ComponentActivity() {
 
     /**
      * 执行录屏搜题（通知权限和悬浮窗权限已通过校验）。
-     * 第 1 步：先停止已有的录屏服务实例，释放资源
-     * 第 2 步：启动前台服务（通知栏显示"录屏搜题运行中"）
-     * 第 3 步：弹出系统录屏权限对话框
+     * 流程调整：先弹出系统录屏授权弹窗，等待用户授权成功后，再启动前台服务+初始化MediaProjection。
+     * 避免同时并发启动前台服务和唤起授权弹窗导致的时序竞争。
      */
     private fun doScreenCaptureSearch() {
         Log.d("【SCREEN_RECORD_LOG】", "doScreenCaptureSearch 入口")
@@ -524,18 +526,23 @@ class HomeActivity : ComponentActivity() {
                 Log.w("【SCREEN_RECORD_LOG】", "停止旧录屏实例异常: ${e.message}", e)
             }
 
-            // 第 2 步：启动前台服务（通知栏显示"录屏搜题运行中"）
-            Log.d("【SCREEN_RECORD_LOG】", "启动前台录屏服务")
-            ScreenCaptureService.startForegroundOnly(this)
-
-            // 第 3 步：弹出系统录屏权限对话框
+            // 第 2 步：弹出系统录屏权限对话框（不提前启动前台服务，避免时序竞争）
             val projectionManager = getSystemService(
                 android.content.Context.MEDIA_PROJECTION_SERVICE
             ) as? android.media.projection.MediaProjectionManager
             if (projectionManager != null) {
                 Log.d("【SCREEN_RECORD_LOG】", "弹出系统录屏授权对话框")
+                screenCaptureTimedOut = false
+                // 设置超时检测：30秒后如果未收到回调，输出超时日志
+                kotlinx.coroutines.MainScope().launch {
+                    kotlinx.coroutines.delay(30000L)
+                    if (!screenCaptureTimedOut) {
+                        screenCaptureTimedOut = true
+                        Log.e("【SCREEN_RECORD_LOG】", "录屏授权超时(30s): 用户未在30秒内完成授权操作")
+                    }
+                }
                 screenCaptureLauncher.launch(projectionManager.createScreenCaptureIntent())
-                Log.d("【SCREEN_RECORD_LOG】", "录屏授权对话框已弹出")
+                Log.d("【SCREEN_RECORD_LOG】", "录屏授权对话框已弹出，等待用户授权回调")
             } else {
                 Log.e("【SCREEN_RECORD_LOG】", "无法获取 MediaProjectionManager")
                 Toast.makeText(this, "设备不支持录屏功能", Toast.LENGTH_LONG).show()

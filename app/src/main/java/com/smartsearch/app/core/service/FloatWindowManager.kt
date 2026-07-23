@@ -424,6 +424,13 @@ object FloatWindowManager {
                 }
             }
 
+            // 手指拖动/缩放抬起后保存选区（记忆选区位置）
+            onSaveRect = { rect ->
+                Log.d("【SELECT_LOG】", "showSelectOverlay onSaveRect: rect=(${rect.left},${rect.top},${rect.right},${rect.bottom}) mode=${currentSearchMode}")
+                lastSelectionRect = rect
+                SelectionPrefs.save(ctx, rect, currentSearchMode)
+            }
+
             // 附加到窗口
             attachToWindow()
         }

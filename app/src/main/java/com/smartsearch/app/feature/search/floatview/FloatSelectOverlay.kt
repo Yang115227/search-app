@@ -58,6 +58,12 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
     /** 选区变化回调（拖拽/缩放时触发，用于连续搜题模式更新识别范围） */
     var onSelectionChanged: ((Rect) -> Unit)? = null
 
+    /**
+     * 选区保存回调：手指拖动/缩放抬起后，将最新选区保存到持久化存储。
+     * 由 FloatWindowManager.showSelectOverlay 设置，调用 SelectionPrefs.save() 落盘。
+     */
+    var onSaveRect: ((Rect) -> Unit)? = null
+
     /** 是否处于连续搜题模式 */
     var isContinuousMode: Boolean = false
         set(value) {
@@ -608,6 +614,10 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
                 selectionRect.bottom.toInt()
             )
             Log.d("【SELECT_LOG】", "handleTouchUp: touchMode=$touchMode rect=(${rect.left},${rect.top},${rect.right},${rect.bottom}) isAdjustmentMode=$isAdjustmentMode isContinuousMode=$isContinuousMode")
+
+            // 保存最新选区到持久化存储（记忆选区位置）
+            onSaveRect?.invoke(rect)
+            Log.d("【SELECT_LOG】", "handleTouchUp: 已调用 onSaveRect 保存选区")
 
             if (isAdjustmentMode) {
                 // 调整模式：手指抬起后自动隐藏，触发调整完成回调
