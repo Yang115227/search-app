@@ -44,6 +44,11 @@ import com.smartsearch.app.core.utils.RectUtil
  */
 class FloatSelectOverlay(private val context: Context) : View(context) {
 
+    init {
+        // 确保 onDraw 被调用（View 默认 willNotDraw=false，但显式设置更安全）
+        setWillNotDraw(false)
+    }
+
     // ==================== 回调 ====================
 
     /** 点击关闭按钮时的回调 */
@@ -228,9 +233,11 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
         style = Paint.Style.FILL
     }
 
-    /** 选区透明镂空画笔（CLEAR 模式） */
+    /** 选区透明镂空画笔（DST_OUT 模式，用于在遮罩上挖出选区） */
     private val clearPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        xfermode = PorterDuffXfermode(PorterDuff.Mode.CLEAR)
+        // DST_OUT = Dest * (1 - SrcAlpha)，在已绘制的遮罩上挖出选区
+        // 替代 API 29+ 已弃用的 CLEAR 模式，兼容 API 36 硬件加速 Canvas
+        xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_OUT)
         style = Paint.Style.FILL
     }
 
@@ -357,20 +364,18 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
+        Log.d("【SELECT_LOG】", "onDraw 绘制: selectionRect=(${selectionRect.left.toInt()},${selectionRect.top.toInt()},${selectionRect.right.toInt()},${selectionRect.bottom.toInt()}) width=${width} height=${height}")
 
-        if (selectionRect.isEmpty || selectionRect.width() <= 0 || selectionRect.height() <= 0) return
+        if (selectionRect.isEmpty || selectionRect.width() <= 0 || selectionRect.height() <= 0) {
+            Log.d("【SELECT_LOG】", "onDraw: 选区为空, 跳过绘制")
+            return
+        }
 
         // ── 第 1 层：绘制半透明遮罩 + 镂空选区 ──
-        // 使用离屏 Bitmap 实现 CLEAR 镂空效果
-        val layerId = canvas.saveLayer(0f, 0f, width.toFloat(), height.toFloat(), null)
-
-        // 先画满遮罩
+        // 使用 DST_OUT 模式镂空选区（替代已弃用的 CLEAR），兼容 API 36 硬件加速 Canvas
+        // 无需 saveLayer，直接在 Canvas 上绘制即可
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), maskPaint)
-
-        // 在选区内镂空（CLEAR 模式）
         canvas.drawRect(selectionRect, clearPaint)
-
-        canvas.restoreToCount(layerId)
 
         // ── 第 2 层：选区边框 ──
         canvas.drawRect(selectionRect, borderPaint)
@@ -659,6 +664,11 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
 
     // ==================== 窗口附加/移除 ====================
 
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        Log.d("【SELECT_LOG】", "onAttachedToWindow: 视图已附加到窗口, selectionRect=(${selectionRect.left.toInt()},${selectionRect.top.toInt()},${selectionRect.right.toInt()},${selectionRect.bottom.toInt()})")
+    }
+
     /**
      * 通过 WindowManager 将悬浮窗附加到屏幕上。
      */
@@ -672,6 +682,7 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
 
         // 初始化选区
         initSelectionRect()
+        Log.d("【SELECT_LOG】", "attachToWindow: initSelectionRect 完成, selectionRect=(${selectionRect.left.toInt()},${selectionRect.top.toInt()},${selectionRect.right.toInt()},${selectionRect.bottom.toInt()})")
 
         val params = WindowManager.LayoutParams().apply {
             // Android 8.0+ (API 26+) 统一使用 TYPE_APPLICATION_OVERLAY
@@ -701,6 +712,10 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
             windowManager.addView(this, params)
             isAttached = true
             Log.d("【SELECT_LOG】", "attachToWindow: addView 成功, screen=${screenWidth}x${screenHeight}")
+            // addView 后立即触发重绘，确保 onDraw 在下一次布局循环中被调用
+            invalidate()
+            // 跨线程重绘兜底：确保即使主线程繁忙也能触发绘制
+            postInvalidate()
         } catch (e: SecurityException) {
             Log.e("【SELECT_LOG】", "attachToWindow: addView 失败(SecurityException): ${e.message}")
             isAttached = false
