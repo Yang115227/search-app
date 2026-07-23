@@ -284,8 +284,8 @@ fun QuestionBankManageScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        .padding(horizontal = 12.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     // 导入Excel按钮
                     // 注意：导入时请校验 Excel 文件格式，确保包含正确的列头（如：题目、选项、答案等）
@@ -293,10 +293,10 @@ fun QuestionBankManageScreen(
                         onClick = { onImportClick?.invoke() },
                         modifier = Modifier
                             .weight(1f)
-                            .height(44.dp),
+                            .height(40.dp),
                         shape = RoundedCornerShape(8.dp)
                     ) {
-                        Text("导入Excel", fontSize = 14.sp)
+                        Text("导入Excel", fontSize = 13.sp, maxLines = 1)
                     }
 
                     // 重命名按钮（仅选中一项时启用）
@@ -305,16 +305,16 @@ fun QuestionBankManageScreen(
                         enabled = selectedSubjects.size == 1,
                         modifier = Modifier
                             .weight(1f)
-                            .height(44.dp),
+                            .height(40.dp),
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Icon(
                             Icons.Default.Edit,
                             contentDescription = null,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(16.dp)
                         )
-                        Spacer(Modifier.width(4.dp))
-                        Text("重命名", fontSize = 14.sp)
+                        Spacer(Modifier.width(2.dp))
+                        Text("重命名", fontSize = 13.sp, maxLines = 1)
                     }
 
                     // 删除按钮（仅选中一项时启用）
@@ -326,7 +326,7 @@ fun QuestionBankManageScreen(
                         enabled = selectedSubjects.size == 1,
                         modifier = Modifier
                             .weight(1f)
-                            .height(44.dp),
+                            .height(40.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Color(0xFFF44336)
                         ),
@@ -335,10 +335,10 @@ fun QuestionBankManageScreen(
                         Icon(
                             Icons.Default.Delete,
                             contentDescription = null,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(16.dp)
                         )
-                        Spacer(Modifier.width(4.dp))
-                        Text("删除", fontSize = 14.sp)
+                        Spacer(Modifier.width(2.dp))
+                        Text("删除", fontSize = 13.sp, maxLines = 1)
                     }
 
                     // 批量删除按钮（选中两项及以上时显示，避免与单删按钮重复）
@@ -350,7 +350,7 @@ fun QuestionBankManageScreen(
                             },
                             modifier = Modifier
                                 .weight(1f)
-                                .height(44.dp),
+                                .height(40.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = Color(0xFFD32F2F)
                             ),
@@ -359,10 +359,10 @@ fun QuestionBankManageScreen(
                             Icon(
                                 Icons.Default.Delete,
                                 contentDescription = null,
-                                modifier = Modifier.size(18.dp)
+                                modifier = Modifier.size(16.dp)
                             )
-                            Spacer(Modifier.width(4.dp))
-                            Text("批量删除", fontSize = 14.sp)
+                            Spacer(Modifier.width(2.dp))
+                            Text("批量删除", fontSize = 13.sp, maxLines = 1)
                         }
                     }
                 }

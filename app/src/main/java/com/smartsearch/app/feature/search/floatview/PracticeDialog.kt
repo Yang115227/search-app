@@ -332,15 +332,32 @@ class PracticeDialog(private val context: Context) {
 
     /**
      * 解析选项 JSON 字符串为列表。
+     * 支持多种格式：JSON数组、换行分隔、前缀标记分隔、逗号分隔。
      */
     private fun parseOptions(options: String): List<String> {
         if (options.isBlank()) return emptyList()
-        return try {
+
+        // 1. 尝试 JSON 数组解析
+        try {
             val jsonArray = JsonParser.parseString(options).asJsonArray
-            jsonArray.map { it.asString }
+            val result = jsonArray.map { it.asString }
+            if (result.isNotEmpty()) return result
         } catch (_: Exception) {
-            options.split("\n").filter { it.isNotBlank() }
         }
+
+        // 2. 尝试换行分隔
+        val newlineSplit = options.split("\n").filter { it.isNotBlank() }
+        if (newlineSplit.size >= 2) return newlineSplit
+
+        // 3. 尝试按选项前缀标记拆分（A. B. C. D.）
+        val splitByPrefix = options.split(Regex("""(?=[A-Da-d][.、．)）])""")).filter { it.isNotBlank() }
+        if (splitByPrefix.size >= 2) return splitByPrefix
+
+        // 4. 尝试逗号/分号分隔
+        val commaSplit = options.split(Regex("[,;，；]")).filter { it.isNotBlank() }
+        if (commaSplit.size >= 2) return commaSplit
+
+        return listOf(options)
     }
 
     /**

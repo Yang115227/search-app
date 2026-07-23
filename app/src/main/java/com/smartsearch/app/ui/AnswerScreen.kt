@@ -575,7 +575,9 @@ fun AnswerScreen(
 
                     // 选项
                     val options = parseOptions(q.options)
+                    Log.d("【PRACTICE_LOG】", "渲染选项: questionId=${q.id} optionsCount=${options.size}")
                     options.forEachIndexed { index, option ->
+                        Log.d("【PRACTICE_LOG】", "  选项[$index]: ${option.take(100)}")
                         val isSelected = selectedIndex == index
                         OptionItem(
                             text = option,
@@ -930,14 +932,63 @@ private fun StatItem(label: String, value: String) {
 }
 
 /**
- * 解析选项 JSON 字符串。
+ * 解析选项 JSON 字符串为列表。
+ * 支持多种格式：
+ * 1. JSON 数组：["A.xxx","B.yyy","C.zzz","D.www"]
+ * 2. 换行分隔：A.xxx\nB.yyy\nC.zzz\nD.www
+ * 3. 逗号分隔：A.xxx,B.yyy,C.zzz,D.www
+ * 4. 空格分隔（兜底，仅当其他方式均失败时）
  */
 private fun parseOptions(options: String): List<String> {
-    if (options.isBlank()) return emptyList()
-    return try {
-        com.google.gson.JsonParser.parseString(options).asJsonArray
-            .map { it.asString }
-    } catch (_: Exception) {
-        options.split("\n").filter { it.isNotBlank() }
+    if (options.isBlank()) {
+        Log.d("【PRACTICE_LOG】", "parseOptions: options 为空字符串")
+        return emptyList()
     }
+
+    Log.d("【PRACTICE_LOG】", "parseOptions 原始: len=${options.length} content=[${options.take(200)}]")
+
+    // 1. 尝试 JSON 数组解析
+    try {
+        val jsonArray = com.google.gson.JsonParser.parseString(options).asJsonArray
+        val result = jsonArray.map { it.asString }
+        Log.d("【PRACTICE_LOG】", "parseOptions JSON解析成功: count=${result.size} items=${result}")
+        if (result.isNotEmpty()) return result
+    } catch (_: Exception) {
+        Log.d("【PRACTICE_LOG】", "parseOptions JSON解析失败，尝试其他格式")
+    }
+
+    // 2. 尝试换行分隔
+    val newlineSplit = options.split("\n").filter { it.isNotBlank() }
+    if (newlineSplit.size >= 2) {
+        Log.d("【PRACTICE_LOG】", "parseOptions 换行分隔: count=${newlineSplit.size} items=${newlineSplit}")
+        return newlineSplit
+    }
+
+    // 3. 尝试按常见选项分隔符拆分（如 "A. " 或 "A、" 或 "A." 前缀标记）
+    val optionPrefixPattern = Regex("""(?:^|\n|[,;，；])\s*([A-Da-d][.、．)）])""")
+    val prefixMatch = optionPrefixPattern.findAll(options).map { it.value }.toList()
+    if (prefixMatch.size >= 2) {
+        // 按选项前缀拆分
+        val splitByPrefix = options.split(Regex("""(?=[A-Da-d][.、．)）])""")).filter { it.isNotBlank() }
+        Log.d("【PRACTICE_LOG】", "parseOptions 前缀分隔: count=${splitByPrefix.size} items=${splitByPrefix}")
+        if (splitByPrefix.size >= 2) return splitByPrefix
+    }
+
+    // 4. 尝试逗号/分号分隔
+    val commaSplit = options.split(Regex("[,;，；]")).filter { it.isNotBlank() }
+    if (commaSplit.size >= 2) {
+        Log.d("【PRACTICE_LOG】", "parseOptions 逗号分隔: count=${commaSplit.size} items=${commaSplit}")
+        return commaSplit
+    }
+
+    // 5. 兜底：按空格分隔（仅当选项短且无更好方式时）
+    val spaceSplit = options.split(Regex("\\s+")).filter { it.isNotBlank() }
+    if (spaceSplit.size >= 2) {
+        Log.d("【PRACTICE_LOG】", "parseOptions 空格分隔: count=${spaceSplit.size} items=${spaceSplit}")
+        return spaceSplit
+    }
+
+    // 6. 最后兜底：返回单个选项
+    Log.d("【PRACTICE_LOG】", "parseOptions 无法拆分，返回单元素列表: [${options}]")
+    return listOf(options)
 }
