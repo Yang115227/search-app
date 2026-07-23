@@ -29,6 +29,7 @@ import com.smartsearch.app.data.local.QuizDatabase
 import com.smartsearch.app.data.local.entity.PracticeRecordEntity
 import com.smartsearch.app.data.local.entity.PracticeSessionEntity
 import com.smartsearch.app.data.local.entity.QuestionEntity
+import com.smartsearch.app.data.parser.AnswerCleaner
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -302,8 +303,7 @@ fun AnswerScreen(
                             options[selectedIndex]
                         } else ""
 
-                        val isCorrect = selectedAnswer.contains(q.answer, ignoreCase = true) ||
-                                q.answer.contains(selectedAnswer, ignoreCase = true)
+                        val isCorrect = AnswerCleaner.compare(selectedAnswer, q.answer)
 
                         submittedQuestions = submittedQuestions + q.id
                         answeredCount++
@@ -513,14 +513,8 @@ fun AnswerScreen(
                             index = index,
                             isSelected = isSelected,
                             isSubmitted = isSubmitted,
-                            isCorrect = isSubmitted && (
-                                    option.contains(q.answer, ignoreCase = true) ||
-                                            q.answer.contains(option, ignoreCase = true)
-                                    ),
-                            isWrong = isSubmitted && isSelected && !(
-                                    option.contains(q.answer, ignoreCase = true) ||
-                                            q.answer.contains(option, ignoreCase = true)
-                                    ),
+                            isCorrect = isSubmitted && AnswerCleaner.compare(option, q.answer),
+                            isWrong = isSubmitted && isSelected && !AnswerCleaner.compare(option, q.answer),
                             enabled = !isSubmitted,
                             onClick = {
                                 if (!isSubmitted) {
@@ -536,8 +530,7 @@ fun AnswerScreen(
                     if (isSubmitted) {
                         Spacer(Modifier.height(16.dp))
                         val isCorrect = options.getOrNull(selectedIndex ?: -1)?.let { selected ->
-                            selected.contains(q.answer, ignoreCase = true) ||
-                                    q.answer.contains(selected, ignoreCase = true)
+                            AnswerCleaner.compare(selected, q.answer)
                         } ?: false
 
                         Card(

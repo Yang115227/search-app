@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.smartsearch.app.data.local.QuizDatabase
 import com.smartsearch.app.data.local.entity.QuestionEntity
+import com.smartsearch.app.data.parser.AnswerCleaner
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 
@@ -51,6 +52,12 @@ object QuestionBankSearcher {
             return "题干为空，无法检索"
         }
 
+        // 清洗 OCR 文本，去除冗余标记和全角符号
+        val cleaned = AnswerCleaner.cleanSafe(trimmed)
+        if (cleaned.isBlank()) {
+            return "题干清洗后为空，无法检索"
+        }
+
         return try {
             val db = QuizDatabase.getInstance(context)
             val dao = db.questionDao()
@@ -59,14 +66,14 @@ object QuestionBankSearcher {
             // 调用方（无障碍服务/录屏服务）已在后台线程，不会阻塞主线程
             runBlocking(Dispatchers.IO) {
                 // 第 1 级：精确匹配
-                val exactMatch = dao.findByExactQuestion(trimmed)
+                val exactMatch = dao.findByExactQuestion(cleaned)
                 if (exactMatch != null) {
                     Log.d(TAG, "精确匹配成功: id=${exactMatch.id}")
                     return@runBlocking formatAnswer(exactMatch)
                 }
 
                 // 第 2 级：模糊匹配（取题干前 KEYWORD_LENGTH 字符）
-                val keyword = trimmed.take(KEYWORD_LENGTH)
+                val keyword = cleaned.take(KEYWORD_LENGTH)
                 val fuzzyMatches = dao.searchByKeyword("%$keyword%")
                 if (fuzzyMatches.isNotEmpty()) {
                     Log.d(TAG, "模糊匹配成功: ${fuzzyMatches.size} 条结果")
@@ -74,8 +81,8 @@ object QuestionBankSearcher {
                 }
 
                 // 第 3 级：兜底
-                Log.d(TAG, "未找到匹配题目: ${trimmed.take(50)}...")
-                "未找到匹配的题目，请确认题库已导入相关内容。\n\n搜索关键词：${trimmed.take(100)}..."
+                Log.d(TAG, "未找到匹配题目: ${cleaned.take(50)}...")
+                "未找到匹配的题目，请确认题库已导入相关内容。\n\n搜索关键词：${cleaned.take(100)}..."
             }
         } catch (e: Exception) {
             Log.e(TAG, "题库检索异常", e)

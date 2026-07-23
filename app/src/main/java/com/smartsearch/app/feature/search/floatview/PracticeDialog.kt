@@ -19,6 +19,7 @@ import android.util.Log
 import com.smartsearch.app.data.local.QuizDatabase
 import com.smartsearch.app.data.local.entity.PracticeRecordEntity
 import com.smartsearch.app.data.local.entity.QuestionEntity
+import com.smartsearch.app.data.parser.AnswerCleaner
 import com.google.gson.JsonParser
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -386,8 +387,7 @@ class PracticeDialog(private val context: Context) {
         answeredCount++
 
         // 判断是否正确
-        val isCorrect = selectedAnswer.contains(q.answer, ignoreCase = true) ||
-                q.answer.contains(selectedAnswer, ignoreCase = true)
+        val isCorrect = AnswerCleaner.compare(selectedAnswer, q.answer)
 
         if (isCorrect) {
             correctCount++
@@ -425,9 +425,7 @@ class PracticeDialog(private val context: Context) {
             val radio = optionsGroup.getChildAt(i) as? RadioButton ?: continue
             if (i < options.size) {
                 val optText = options[i]
-                if (optText.contains(q.answer, ignoreCase = true) ||
-                    q.answer.contains(optText, ignoreCase = true)
-                ) {
+                if (AnswerCleaner.compare(optText, q.answer)) {
                     radio.setTextColor(Color.parseColor("#2E7D32")) // 绿色 = 正确答案
                 } else if (i == selectedOptionIndex) {
                     radio.setTextColor(Color.parseColor("#C62828")) // 红色 = 选错

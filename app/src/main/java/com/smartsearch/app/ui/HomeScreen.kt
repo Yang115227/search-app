@@ -38,6 +38,7 @@ import com.smartsearch.app.core.permission.PermissionManager
 import com.smartsearch.app.core.service.FloatingWindowService
 import com.smartsearch.app.core.service.FloatWindowManager
 import com.smartsearch.app.data.local.QuizDatabase
+import com.smartsearch.app.data.parser.AnswerCleaner
 import com.smartsearch.app.data.parser.ExcelImporter
 import com.smartsearch.app.feature.search.floatview.PracticeDialog
 import com.smartsearch.app.feature.search.floatview.QuestionBankDialog
@@ -214,7 +215,11 @@ class HomeActivity : ComponentActivity() {
     /**
      * 使用指定学科导入 Excel 文件。
      */
-    private fun importWithSubject(uri: Uri, subject: String) {
+    private fun importWithSubject(
+        uri: Uri,
+        subject: String,
+        importMode: AnswerCleaner.ImportMode = AnswerCleaner.ImportMode.STRICT
+    ) {
         pendingImportUri = null
         Toast.makeText(
             this,
@@ -227,23 +232,36 @@ class HomeActivity : ComponentActivity() {
             val result = ExcelImporter.importFromUri(
                 this@HomeActivity,
                 uri,
-                defaultSubject = subject
+                defaultSubject = subject,
+                importMode = importMode
             )
             when (result) {
                 is ExcelImporter.ImportResult.Success -> {
+                    val msg = buildString {
+                        append("导入成功：${result.count} 条题目")
+                        if (subject.isNotBlank()) append("（$subject）")
+                        if (result.errorRows.isNotEmpty()) {
+                            append("；${result.errorRows.size} 行跳过（行号: ${result.errorRows.joinToString(", ") { it.toString() }}）")
+                        }
+                    }
                     Toast.makeText(
                         this@HomeActivity,
-                        "导入成功：${result.count} 条题目" +
-                                if (subject.isNotBlank()) "（$subject）" else "",
+                        msg,
                         Toast.LENGTH_LONG
                     ).show()
                     // 通知题库管理页面刷新数据
                     importRefreshKey++
                 }
                 is ExcelImporter.ImportResult.Error -> {
+                    val msg = buildString {
+                        append("导入失败：${result.message}")
+                        if (result.errorRows.isNotEmpty()) {
+                            append("；异常行: ${result.errorRows.joinToString(", ")}")
+                        }
+                    }
                     Toast.makeText(
                         this@HomeActivity,
-                        "导入失败：${result.message}",
+                        msg,
                         Toast.LENGTH_LONG
                     ).show()
                 }

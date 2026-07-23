@@ -19,6 +19,12 @@ import java.io.InputStream
 /**
  * Excel 题库导入解析器 —— 读取 .xlsx 文件，解析行列映射为 QuestionEntity 并批量写入 Room。
  *
+ * 支持两种导入模式：
+ * - **严格模式（STRICT）**：答案清洗后为空的行直接跳过，不导入
+ * - **宽松模式（LENIENT）**：答案清洗后为空的行也收集，但仅做日志记录，不中断导入
+ *
+ * 答案清洗规则详见 [AnswerCleaner]。
+ *
  * # 支持的 Excel 格式
  * - .xlsx（Office Open XML）
  * - .xls（旧版格式，通过 WorkbookFactory 兼容）
@@ -27,28 +33,6 @@ import java.io.InputStream
  * 支持两种模式：
  * 1. **自动检测表头**：第一行为表头，自动匹配列名（支持中英文别名）
  * 2. **固定列序**：无表头时按固定列序读取（A=题干, B=答案, C=解析, D=选项, E=学科）
- *
- * # 使用方式
- * ```kotlin
- * // 在协程中调用
- * val result = ExcelImporter.importFromUri(context, fileUri)
- * when (result) {
- *     is ExcelImporter.ImportResult.Success -> {
- *         // result.count 导入数量
- *     }
- *     is ExcelImporter.ImportResult.Error -> {
- *         // result.message 错误信息
- *     }
- * }
- * ```
- *
- * # 依赖说明
- * 需要在 build.gradle.kts 中添加 Apache POI 依赖：
- * ```kotlin
- * implementation("org.apache.poi:poi:5.2.5")
- * implementation("org.apache.poi:poi-ooxml:5.2.5")
- * ```
- * 如不使用 POI，可替换为 Apache POI 的轻量替代方案或手动解析 XML。
  */
 object ExcelImporter {
 
@@ -86,8 +70,25 @@ object ExcelImporter {
 
     /** 导入结果密封类 */
     sealed class ImportResult {
-        data class Success(val count: Int) : ImportResult()
-        data class Error(val message: String) : ImportResult()
+        /**
+         * 导入成功。
+         * @param count 成功导入的题目数
+         * @param errorRows 清洗后为空或格式异常的 Excel 行号列表（从 1 开始）
+         */
+        data class Success(
+            val count: Int,
+            val errorRows: List<Int> = emptyList()
+        ) : ImportResult()
+
+        /**
+         * 导入失败。
+         * @param message 错误描述
+         * @param errorRows 清洗后为空或格式异常的 Excel 行号列表（从 1 开始）
+         */
+        data class Error(
+            val message: String,
+            val errorRows: List<Int> = emptyList()
+        ) : ImportResult()
     }
 
     // ==================== 公开 API ====================
@@ -98,14 +99,20 @@ object ExcelImporter {
      * @param context 上下文
      * @param uri Excel 文件的 Content Uri（如从文件选择器获取）
      * @param defaultSubject 默认学科，非空时覆盖文件中每道题的学科（或填补空学科）
+     * @param importMode 导入模式：严格模式（STRICT）空答案行跳过，宽松模式（LENIENT）仅记录不跳过
      * @return [ImportResult]
      */
-    suspend fun importFromUri(context: Context, uri: Uri, defaultSubject: String = ""): ImportResult = withContext(Dispatchers.IO) {
+    suspend fun importFromUri(
+        context: Context,
+        uri: Uri,
+        defaultSubject: String = "",
+        importMode: AnswerCleaner.ImportMode = AnswerCleaner.ImportMode.STRICT
+    ): ImportResult = withContext(Dispatchers.IO) {
         try {
             val inputStream: InputStream = context.contentResolver.openInputStream(uri)
                 ?: return@withContext ImportResult.Error("无法打开文件，请确保文件未被其他程序占用")
 
-            val result = parseAndImport(inputStream, context, defaultSubject)
+            val result = parseAndImport(inputStream, context, defaultSubject, importMode)
             inputStream.close()
             result
         } catch (e: SecurityException) {
@@ -121,10 +128,13 @@ object ExcelImporter {
 
     /**
      * 解析 Excel 输入流并批量写入数据库。
-     *
-     * @param defaultSubject 默认学科，非空时覆盖文件中每道题的学科（或填补空学科）
      */
-    private fun parseAndImport(inputStream: InputStream, context: Context, defaultSubject: String = ""): ImportResult {
+    private fun parseAndImport(
+        inputStream: InputStream,
+        context: Context,
+        defaultSubject: String = "",
+        importMode: AnswerCleaner.ImportMode = AnswerCleaner.ImportMode.STRICT
+    ): ImportResult {
         val workbook: Workbook = try {
             WorkbookFactory.create(inputStream)
         } catch (e: Exception) {
@@ -187,18 +197,30 @@ object ExcelImporter {
 
             // 解析数据行
             val questions = mutableListOf<QuestionEntity>()
+            val allErrorRows = mutableListOf<Int>()
+
             for (rowIndex in dataStartRow until effectiveRows) {
                 val row = sheet.getRow(rowIndex) ?: continue
                 if (isRowEmpty(row)) continue
 
-                val question = parseRow(row, columnMapping, rowIndex, defaultSubject)
-                if (question != null) {
-                    questions.add(question)
+                val result = parseRow(row, columnMapping, rowIndex, defaultSubject, importMode)
+                when (result) {
+                    is ParseRowResult.Success -> questions.add(result.entity)
+                    is ParseRowResult.Skipped -> {
+                        // 跳过行：记录行号
+                        allErrorRows.add(result.rowNumber)
+                        if (result.reason.isNotBlank()) {
+                            Log.w(TAG, "第 ${result.rowNumber} 行跳过: ${result.reason}")
+                        }
+                    }
                 }
             }
 
             if (questions.isEmpty()) {
-                return ImportResult.Error("未解析到有效题目数据，请确保 Excel 包含「题干」和「答案」两列")
+                val errorDetail = if (allErrorRows.isNotEmpty()) {
+                    "（异常行: ${allErrorRows.joinToString(", ")}）"
+                } else ""
+                return ImportResult.Error("未解析到有效题目数据，请确保 Excel 包含「题干」和「答案」两列$errorDetail", allErrorRows)
             }
 
             // 批量写入数据库
@@ -214,8 +236,8 @@ object ExcelImporter {
                 importedCount += batch.size
             }
 
-            Log.d(TAG, "Excel 导入完成: $importedCount 条题目")
-            return ImportResult.Success(importedCount)
+            Log.d(TAG, "Excel 导入完成: $importedCount 条题目，${allErrorRows.size} 行异常跳过")
+            return ImportResult.Success(importedCount, allErrorRows)
         }
     }
 
@@ -255,19 +277,36 @@ object ExcelImporter {
 
     // ==================== 数据行解析 ====================
 
+    /** 行解析结果 */
+    private sealed class ParseRowResult {
+        data class Success(val entity: QuestionEntity) : ParseRowResult()
+        data class Skipped(val rowNumber: Int, val reason: String = "") : ParseRowResult()
+    }
+
     /**
      * 解析单行数据为 [QuestionEntity]。
+     *
+     * 答案字段会经过 [AnswerCleaner] 清洗：
+     * - 去除首尾空白换行
+     * - 全角转半角
+     * - 剔除「答案：」「【】」等冗余标记
+     * - 选择题答案统一大写
+     * - 多空格合并
+     * - 清洗后为空答案的行拦截跳过
      *
      * @param row Excel 行对象
      * @param columnMapping 表头列映射（为空则使用固定列序：A=题干, B=答案, C=解析, D=选项, E=学科）
      * @param rowIndex 行号（从 0 开始，用于日志）
+     * @param defaultSubject 默认学科
+     * @param importMode 导入模式
      */
     private fun parseRow(
         row: Row,
         columnMapping: Map<Int, ColumnType>,
         rowIndex: Int,
-        defaultSubject: String = ""
-    ): QuestionEntity? {
+        defaultSubject: String = "",
+        importMode: AnswerCleaner.ImportMode = AnswerCleaner.ImportMode.STRICT
+    ): ParseRowResult {
         try {
             val question: String
             val answer: String
@@ -296,24 +335,37 @@ object ExcelImporter {
                 subject = defaultSubject
             }
 
-            // 题干和答案不能为空
-            if (question.isBlank() || answer.isBlank()) {
-                Log.w(TAG, "第 ${rowIndex + 1} 行题干或答案为空，跳过")
-                return null
+            // 题干不能为空
+            if (question.isBlank()) {
+                return ParseRowResult.Skipped(rowIndex + 1, "题干为空")
             }
 
-            return QuestionEntity(
-            question = question.trim(),
-            answer = answer.trim(),
-            explanation = explanation.trim(),
-            options = options.trim(),
-            subject = subject.trim(),
-            source = "Excel导入",
-            importedAt = System.currentTimeMillis()
-        )
+            // 答案清洗
+            val cleanedAnswer = AnswerCleaner.cleanSafe(answer)
+
+            // 清洗后答案为空
+            if (cleanedAnswer.isBlank()) {
+                if (importMode == AnswerCleaner.ImportMode.STRICT) {
+                    return ParseRowResult.Skipped(rowIndex + 1, "答案清洗后为空")
+                }
+                // 宽松模式：不跳过，但记录警告
+                Log.w(TAG, "第 ${rowIndex + 1} 行答案清洗后为空（宽松模式，仍导入）")
+            }
+
+            return ParseRowResult.Success(
+                QuestionEntity(
+                    question = question.trim(),
+                    answer = cleanedAnswer.ifBlank { answer.trim() },
+                    explanation = explanation.trim(),
+                    options = options.trim(),
+                    subject = subject.trim(),
+                    source = "Excel导入",
+                    importedAt = System.currentTimeMillis()
+                )
+            )
         } catch (e: Exception) {
             Log.w(TAG, "Excel 文件格式错误：第 ${rowIndex + 1} 行数据格式异常，请检查", e)
-            return null
+            return ParseRowResult.Skipped(rowIndex + 1, "数据格式异常: ${e.message}")
         }
     }
 
