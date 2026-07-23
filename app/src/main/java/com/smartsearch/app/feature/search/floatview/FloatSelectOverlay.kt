@@ -332,8 +332,12 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
 
     // ==================== 屏幕尺寸缓存 ====================
 
-    private var screenWidth = 0
-    private var screenHeight = 0
+    /** 屏幕宽度缓存（internal 供 FloatWindowManager 日志访问） */
+    var screenWidth = 0
+        private set
+    /** 屏幕高度缓存（internal 供 FloatWindowManager 日志访问） */
+    var screenHeight = 0
+        private set
 
     // ==================== 初始化选区 ====================
 
