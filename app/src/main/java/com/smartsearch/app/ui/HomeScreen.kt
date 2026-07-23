@@ -3,7 +3,10 @@ package com.smartsearch.app.ui
 import android.Manifest
 import android.app.Activity
 import android.content.DialogInterface
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -113,6 +116,47 @@ class HomeActivity : ComponentActivity() {
     /** 录屏初始化超时 Runnable（用于取消） */
     private var captureInitTimeout: Runnable? = null
 
+    /** 录屏就绪广播接收器（接收 Service 初始化完成通知） */
+    private val captureReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            when (intent.action) {
+                ScreenCaptureService.ACTION_CAPTURE_READY -> {
+                    // 取消超时计时器
+                    captureInitTimeout?.let {
+                        Handler(Looper.getMainLooper()).removeCallbacks(it)
+                    }
+                    captureInitTimeout = null
+
+                    // 主线程执行 showSelectOverlay
+                    Handler(Looper.getMainLooper()).post {
+                        try {
+                            Log.d("【SCREEN_RECORD_LOG】", "收到CAPTURE_READY广播，准备调用showSelectOverlay")
+                            FloatWindowManager.showSelectOverlayForScreenCapture(this@HomeActivity)
+                            Toast.makeText(this@HomeActivity, "录屏模式已启动，请框选题目区域", Toast.LENGTH_SHORT).show()
+                            Log.d("【SCREEN_RECORD_LOG】", "录屏搜题启动全流程完成")
+                        } catch (e: Exception) {
+                            Log.e("【SCREEN_RECORD_LOG】", "showSelectOverlay 异常: ${e.message}", e)
+                            Toast.makeText(this@HomeActivity, "启动录屏搜题失败，已切换到无障碍模式", Toast.LENGTH_LONG).show()
+                            try { startAccessibilitySearch() } catch (_: Exception) { }
+                        }
+                    }
+                }
+                ScreenCaptureService.ACTION_CAPTURE_FAILED -> {
+                    val errorMsg = intent.getStringExtra(ScreenCaptureService.EXTRA_ERROR_MESSAGE) ?: "未知错误"
+                    // 取消超时计时器
+                    captureInitTimeout?.let {
+                        Handler(Looper.getMainLooper()).removeCallbacks(it)
+                    }
+                    captureInitTimeout = null
+
+                    Log.e("【SCREEN_RECORD_LOG】", "收到CAPTURE_FAILED广播: $errorMsg")
+                    Toast.makeText(this@HomeActivity, "录屏启动失败: $errorMsg", Toast.LENGTH_LONG).show()
+                    try { startAccessibilitySearch() } catch (_: Exception) { }
+                }
+            }
+        }
+    }
+
     /** 录屏授权结果回调 */
     private val screenCaptureLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -127,42 +171,9 @@ class HomeActivity : ComponentActivity() {
                 ScreenCaptureService.startForegroundOnly(this)
                 Log.d("【SCREEN_RECORD_LOG】", "前台服务已启动，开始发送投影Intent")
 
-                // ── 第2步：设置初始化回调（事件驱动，替代时序猜测） ──
-                // 录屏服务内部完成 MediaProjection + VirtualDisplay 初始化后，
-                // 主动通过此回调通知主程序，避免时序猜测/阻塞等待。
-                ScreenCaptureService.setCaptureCallbacks(
-                    onReady = {
-                        // 回调已运行在主线程（Service.mainHandler.post），
-                        // 额外 post 确保绝对在主线程执行
-                        Handler(Looper.getMainLooper()).post {
-                            try {
-                                // 取消超时计时器
-                                captureInitTimeout?.let {
-                                    Handler(Looper.getMainLooper()).removeCallbacks(it)
-                                }
-                                captureInitTimeout = null
-
-                                Log.d("【SCREEN_RECORD_LOG】", "准备调用showSelectOverlay")
-                                FloatWindowManager.showSelectOverlayForScreenCapture(this)
-                                Toast.makeText(this, "录屏模式已启动，请框选题目区域", Toast.LENGTH_SHORT).show()
-                                Log.d("【SCREEN_RECORD_LOG】", "录屏搜题启动全流程完成")
-                            } catch (e: Exception) {
-                                Log.e("【SCREEN_RECORD_LOG】", "showSelectOverlay 异常: ${e.message}", e)
-                                Toast.makeText(this, "启动录屏搜题失败，已切换到无障碍模式", Toast.LENGTH_LONG).show()
-                                try { startAccessibilitySearch() } catch (_: Exception) { }
-                            }
-                        }
-                    },
-                    onFailed = { errorMsg ->
-                        Handler(Looper.getMainLooper()).post {
-                            Log.e("【SCREEN_RECORD_LOG】", "录屏服务初始化失败: $errorMsg")
-                            Toast.makeText(this, "录屏启动失败: $errorMsg", Toast.LENGTH_LONG).show()
-                            try { startAccessibilitySearch() } catch (_: Exception) { }
-                        }
-                    }
-                )
-
-                // 第3步：将授权Intent发送给录屏服务，创建MediaProjection
+                // ── 第2步：将授权Intent发送给录屏服务，创建MediaProjection ──
+                // Service初始化完成后通过本地广播 ACTION_CAPTURE_READY 通知主程序，
+                // 不再使用同步阻塞回调，避免主线程卡死。
                 ScreenCaptureService.setProjection(
                     this,
                     result.data!!,
@@ -384,6 +395,18 @@ class HomeActivity : ComponentActivity() {
         // 初始化悬浮窗管理器
         FloatWindowManager.init(this)
 
+        // 注册录屏服务就绪广播接收器（异步事件驱动）
+        val captureIntentFilter = IntentFilter().apply {
+            addAction(ScreenCaptureService.ACTION_CAPTURE_READY)
+            addAction(ScreenCaptureService.ACTION_CAPTURE_FAILED)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(captureReceiver, captureIntentFilter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("UnregisterPreviousReceiver")
+            registerReceiver(captureReceiver, captureIntentFilter)
+        }
+
         setContent {
             val navController = rememberNavController()
             importRefreshKey = 0
@@ -464,6 +487,13 @@ class HomeActivity : ComponentActivity() {
                 Toast.makeText(this, "请先开启悬浮窗权限后再试", Toast.LENGTH_LONG).show()
             }
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        try {
+            unregisterReceiver(captureReceiver)
+        } catch (_: Exception) { }
     }
 
     // ==================== 日志导出 ====================

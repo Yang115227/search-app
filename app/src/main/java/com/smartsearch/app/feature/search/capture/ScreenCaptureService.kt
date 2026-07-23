@@ -106,6 +106,17 @@ class ScreenCaptureService : Service() {
         /** Intent Extra: 选区矩形 */
         const val EXTRA_SELECTION_RECT = "selection_rect"
 
+        // ── 本地广播 Action（Service → Activity 事件驱动通知） ──
+
+        /** 录屏初始化成功广播：MediaProjection + VirtualDisplay 创建完成 */
+        const val ACTION_CAPTURE_READY = "com.smartsearch.app.action.CAPTURE_READY"
+
+        /** 录屏初始化失败广播 */
+        const val ACTION_CAPTURE_FAILED = "com.smartsearch.app.action.CAPTURE_FAILED"
+
+        /** 错误信息 Extra */
+        const val EXTRA_ERROR_MESSAGE = "error_message"
+
         // ── 静态持有者 ──
 
         @Volatile
@@ -120,26 +131,6 @@ class ScreenCaptureService : Service() {
          * 判断录屏服务是否正在运行。
          */
         fun isRunning(): Boolean = instance != null
-
-        // ── 事件驱动回调（初始化完成后通知主程序） ──
-
-        /** 录屏初始化成功回调 */
-        private var onCaptureReady: (() -> Unit)? = null
-
-        /** 录屏初始化失败回调 */
-        private var onCaptureFailed: ((String) -> Unit)? = null
-
-        /**
-         * 设置录屏初始化回调（事件驱动，替代时序猜测）。
-         * 必须在调用 setProjection 之前设置。
-         *
-         * @param onReady 初始化成功回调（MediaProjection + VirtualDisplay 创建完成）
-         * @param onFailed 初始化失败回调（参数为错误描述）
-         */
-        fun setCaptureCallbacks(onReady: () -> Unit, onFailed: ((String) -> Unit)? = null) {
-            onCaptureReady = onReady
-            onCaptureFailed = onFailed
-        }
 
         /**
          * 以录屏模式启动搜题。
@@ -549,11 +540,7 @@ class ScreenCaptureService : Service() {
                 PaddleOCREngine.init(this)
                 if (!PaddleOCREngine.isReady()) {
                     Log.e(TAG, "PaddleOCR 引擎初始化失败")
-                    mainHandler.post {
-                        onCaptureFailed?.invoke("OCR引擎初始化失败")
-                        onCaptureReady = null
-                        onCaptureFailed = null
-                    }
+                    sendBroadcast(Intent(ACTION_CAPTURE_FAILED).putExtra(EXTRA_ERROR_MESSAGE, "OCR引擎初始化失败"))
                     try {
                         FloatWindowManager.showAnswerWindow(
                             this,
@@ -572,11 +559,7 @@ class ScreenCaptureService : Service() {
             mediaProjection = ScreenCaptureManager.createMediaProjection(this, projectionIntent)
             if (mediaProjection == null) {
                 Log.e(TAG, "无法获取 MediaProjection")
-                mainHandler.post {
-                    onCaptureFailed?.invoke("MediaProjection 创建失败")
-                    onCaptureReady = null
-                    onCaptureFailed = null
-                }
+                sendBroadcast(Intent(ACTION_CAPTURE_FAILED).putExtra(EXTRA_ERROR_MESSAGE, "MediaProjection 创建失败"))
                 switchToAccessibilityMode()
                 stopSelf()
                 return
@@ -617,11 +600,7 @@ class ScreenCaptureService : Service() {
             )
             if (imageReader == null) {
                 Log.e(TAG, "无法创建 VirtualDisplay/ImageReader")
-                mainHandler.post {
-                    onCaptureFailed?.invoke("VirtualDisplay 创建失败")
-                    onCaptureReady = null
-                    onCaptureFailed = null
-                }
+                sendBroadcast(Intent(ACTION_CAPTURE_FAILED).putExtra(EXTRA_ERROR_MESSAGE, "VirtualDisplay 创建失败"))
                 switchToAccessibilityMode()
                 stopSelf()
                 return
@@ -632,23 +611,14 @@ class ScreenCaptureService : Service() {
 
             isCapturing = true
             blackFrameCount = 0
-            Log.d("【SCREEN_RECORD_LOG】", "③ VirtualDisplay创建成功, 录屏采集已启动")
+            Log.d("【SCREEN_RECORD_LOG】", "③ VirtualDisplay创建成功，发送就绪广播")
 
-            // ── 事件驱动通知：初始化完成，通知主程序创建选区悬浮窗 ──
-            mainHandler.post {
-                Log.d("【SCREEN_RECORD_LOG】", "Service初始化完成，通知主程序")
-                onCaptureReady?.invoke()
-                onCaptureReady = null
-                onCaptureFailed = null
-            }
+            // ── 事件驱动通知：发送本地广播通知主程序创建选区悬浮窗 ──
+            sendBroadcast(Intent(ACTION_CAPTURE_READY))
         } catch (e: Exception) {
             Log.e(TAG, "startCapture 异常: ${e.message}", e)
             // 通知主程序初始化失败
-            mainHandler.post {
-                onCaptureFailed?.invoke("startCapture异常: ${e.message}")
-                onCaptureReady = null
-                onCaptureFailed = null
-            }
+            sendBroadcast(Intent(ACTION_CAPTURE_FAILED).putExtra(EXTRA_ERROR_MESSAGE, "startCapture异常: ${e.message}"))
             // 确保前台通知已发出
             if (!isForegroundStarted) {
                 try { startForegroundNotification() } catch (_: Exception) { }
