@@ -251,6 +251,10 @@ class ScreenCaptureService : Service() {
     /** 录屏前台服务是否已启动 */
     private var isForegroundStarted = false
 
+    /** 连续搜题模式下是否暂停采集（选区调整时暂停） */
+    @Volatile
+    private var isContinuousSearchPaused = false
+
     // ==================== 生命周期 ====================
 
     override fun onCreate() {
@@ -597,9 +601,30 @@ class ScreenCaptureService : Service() {
     }
 
     /**
+     * 暂停连续搜题采集（选区调整时调用）。
+     * 暂停期间 ImageReader 仍在接收帧，但 processImage 会直接跳过。
+     */
+    fun pauseContinuousSearch() {
+        isContinuousSearchPaused = true
+        Log.d(TAG, "连续搜题已暂停（选区调整中）")
+    }
+
+    /**
+     * 恢复连续搜题采集（选区调整完成后调用）。
+     */
+    fun resumeContinuousSearch() {
+        isContinuousSearchPaused = false
+        Log.d(TAG, "连续搜题已恢复")
+    }
+
+    /**
      * 处理单帧图像：裁剪选区 → 检查黑帧 → OCR 识别 → 结果分发。
      */
     private fun processImage(image: Image) {
+        // 连续搜题暂停中 → 跳过处理
+        if (isContinuousSearchPaused) {
+            return
+        }
         val bitmap = imageToBitmap(image) ?: return
 
         // 检查是否为黑帧（FLAG_SECURE 页面检测）

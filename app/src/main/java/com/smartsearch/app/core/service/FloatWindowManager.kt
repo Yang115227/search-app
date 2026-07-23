@@ -54,7 +54,8 @@ object FloatWindowManager {
     // ── 上下文 ──
     private var appContext: Context? = null
 
-    // ── 连续搜题定时器 ──
+    // ── 连续搜题定时器（仅无障碍模式使用） ──
+    // 录屏模式使用 ScreenCaptureService 内置的 ImageReader 连续采集（200ms 节流），无需此定时器
     private val searchHandler = Handler(Looper.getMainLooper())
     private val searchRunnable = object : Runnable {
         override fun run() {
@@ -70,7 +71,7 @@ object FloatWindowManager {
         }
     }
 
-    /** 连续搜题轮询间隔（毫秒） */
+    /** 连续搜题轮询间隔（毫秒），仅无障碍模式使用 */
     private const val CONTINUOUS_SEARCH_INTERVAL_MS = 3000L
 
     // ==================== 状态枚举 ====================
@@ -177,7 +178,7 @@ object FloatWindowManager {
      *
      * 1. 隐藏选区框（从 WindowManager 移除）
      * 2. 显示底部答案弹窗
-     * 3. 启动 3 秒轮询定时器
+     * 3. 启动轮询定时器（仅无障碍模式，录屏模式使用 ScreenCaptureService 内置采集）
      */
     private fun startContinuousSearch(context: Context) {
         currentState = FloatWindowState.CONTINUOUS_SEARCHING
@@ -193,9 +194,12 @@ object FloatWindowManager {
             explanation = "等待识别结果..."
         )
 
-        // 启动 3 秒轮询
-        searchHandler.removeCallbacks(searchRunnable)
-        searchHandler.postDelayed(searchRunnable, CONTINUOUS_SEARCH_INTERVAL_MS)
+        // 仅无障碍模式启动 3 秒轮询
+        // 录屏模式使用 ScreenCaptureService 内置的 ImageReader 连续采集（200ms 节流）
+        if (currentSearchMode != SearchMode.SCREEN_CAPTURE) {
+            searchHandler.removeCallbacks(searchRunnable)
+            searchHandler.postDelayed(searchRunnable, CONTINUOUS_SEARCH_INTERVAL_MS)
+        }
     }
 
     /**
@@ -220,6 +224,11 @@ object FloatWindowManager {
         val ctx = context.applicationContext
         val isContinuous = currentState == FloatWindowState.CONTINUOUS_SEARCHING
 
+        // 录屏模式下暂停连续采集（选区调整中）
+        if (isContinuous && currentSearchMode == SearchMode.SCREEN_CAPTURE) {
+            ScreenCaptureService.getInstance()?.pauseContinuousSearch()
+        }
+
         selectOverlay = FloatSelectOverlay(ctx).apply {
             // 恢复上次选区位置
             val savedRect = this@FloatWindowManager.lastSelectionRect
@@ -233,6 +242,10 @@ object FloatWindowManager {
 
             // 点击 X 关闭按钮 → 回到之前的状态
             onDismiss = {
+                // 录屏模式下恢复采集
+                if (isContinuous && currentSearchMode == SearchMode.SCREEN_CAPTURE) {
+                    ScreenCaptureService.getInstance()?.resumeContinuousSearch()
+                }
                 hideSelectOverlay()
             }
 
@@ -244,6 +257,13 @@ object FloatWindowManager {
             // 调整完成（手指抬起）→ 自动隐藏，触发搜索（仅连续搜题模式）
             onAdjustmentComplete = { rect ->
                 lastSelectionRect = rect
+                // 录屏模式下更新选区并恢复采集
+                if (isContinuous && currentSearchMode == SearchMode.SCREEN_CAPTURE) {
+                    ScreenCaptureService.getInstance()?.apply {
+                        updateSelectionRect(rect)
+                        resumeContinuousSearch()
+                    }
+                }
                 this@FloatWindowManager.onContinuousSearch?.invoke(rect)
                 hideSelectOverlay()
             }
@@ -328,7 +348,17 @@ object FloatWindowManager {
                 stopContinuousSearch()
                 destroyAnswerWindow()
                 this@FloatWindowManager.onAnswerDismissed?.invoke()
+                // 录屏模式下停止录屏服务
+                if (currentSearchMode == SearchMode.SCREEN_CAPTURE || ScreenCaptureService.isRunning()) {
+                    try {
+                        val stopIntent = android.content.Intent(ctx, ScreenCaptureService::class.java)
+                        ctx.stopService(stopIntent)
+                    } catch (e: Exception) {
+                        ScreenCaptureService.getInstance()?.stopCapture()
+                    }
+                }
                 currentState = FloatWindowState.IDLE
+                currentSearchMode = SearchMode.ACCESSIBILITY
                 // 重新显示当前模式的悬浮球
                 FloatingWindowService.showBall()
             }
@@ -348,7 +378,8 @@ object FloatWindowManager {
      * 以录屏模式显示选题框。
      *
      * 与无障碍模式的区别：选区确认后，坐标传递给 [ScreenCaptureService] 而非无障碍服务。
-     * 调用前需确保录屏服务已启动（通过 [ScreenCaptureService.startWithProjection]）。
+     * 录屏模式使用 ScreenCaptureService 内置的 ImageReader 连续采集（200ms 节流），
+     * 选区确认后自动进入连续搜题模式，无需额外的 3 秒轮询定时器。
      *
      * @param context 上下文
      */
@@ -360,6 +391,8 @@ object FloatWindowManager {
             val captureService = ScreenCaptureService.getInstance()
             if (captureService != null) {
                 captureService.updateSelectionRect(rect)
+                // 已进入连续搜题模式，ScreenCaptureService 的 ImageReader 会自动持续采集
+                // 只需触发一次初始截图，后续由 onImageAvailable 自动处理
                 captureService.triggerCaptureOnce()
             } else {
                 // 录屏服务未运行 → 提示用户
@@ -432,6 +465,7 @@ object FloatWindowManager {
 
     /**
      * 销毁所有悬浮窗，清除所有回调，回到 IDLE 状态。
+     * 在录屏模式下，同时停止 ScreenCaptureService。
      */
     fun destroyAll() {
         stopContinuousSearch()
@@ -441,8 +475,22 @@ object FloatWindowManager {
         onAnswerDismissed = null
         onContinuousSearch = null
         lastSelectionRect = null
+
+        // 先保存当前模式，再重置
+        val wasScreenCapture = currentSearchMode == SearchMode.SCREEN_CAPTURE || ScreenCaptureService.isRunning()
         currentSearchMode = SearchMode.ACCESSIBILITY
         currentState = FloatWindowState.IDLE
+
+        // 录屏模式下停止录屏服务
+        if (wasScreenCapture) {
+            try {
+                val stopIntent = android.content.Intent(appContext, ScreenCaptureService::class.java)
+                appContext?.stopService(stopIntent)
+            } catch (e: Exception) {
+                ScreenCaptureService.getInstance()?.stopCapture()
+            }
+        }
+
         // 重新显示当前模式的悬浮球
         FloatingWindowService.showBall()
     }

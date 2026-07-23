@@ -54,24 +54,25 @@ fun QuestionBankListScreen(
     LaunchedEffect(Unit) {
         try {
             val db = QuizDatabase.getInstance(context)
+            var loadedSubjects = emptyList<SubjectCountItem>()
+            var allCount = 0
+            var firstSubject = ""
             withContext(Dispatchers.IO) {
                 try {
                     val allSubjects = db.questionDao().getAllSubjects()
-                    val items = allSubjects.map { subject ->
+                    loadedSubjects = allSubjects.map { subject ->
                         SubjectCountItem(subject, db.questionDao().getCountBySubject(subject))
                     }
-                    val allCount = db.questionDao().getCount()
-                    subjects = items
-                    totalCount = allCount
-                    if (items.isNotEmpty()) {
-                        selectedSubject = items.first().subject
-                    } else {
-                        selectedSubject = ""
-                    }
+                    allCount = db.questionDao().getCount()
+                    firstSubject = if (loadedSubjects.isNotEmpty()) loadedSubjects.first().subject else ""
                 } catch (e: Exception) {
                     Log.e("QuestionBankList", "加载题库数据异常: ${e.message}", e)
                 }
             }
+            // 状态修改必须在主线程
+            subjects = loadedSubjects
+            totalCount = allCount
+            selectedSubject = firstSubject
         } catch (e: Exception) {
             Log.e("QuestionBankList", "初始化数据库异常: ${e.message}", e)
         }

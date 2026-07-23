@@ -80,25 +80,29 @@ fun QuestionBankManageScreen(
             isLoading = true
             try {
                 val db = QuizDatabase.getInstance(context)
-                val (items, allCount) = withContext(Dispatchers.IO) {
-                    val allSubjects = db.questionDao().getAllSubjects()
-                    val itemList = allSubjects.map { subject ->
-                        SubjectManageItem(subject, db.questionDao().getCountBySubject(subject))
+                var loadedItems = emptyList<SubjectManageItem>()
+                var allCount = 0
+                withContext(Dispatchers.IO) {
+                    try {
+                        val allSubjects = db.questionDao().getAllSubjects()
+                        loadedItems = allSubjects.map { subject ->
+                            SubjectManageItem(subject, db.questionDao().getCountBySubject(subject))
+                        }
+                        allCount = db.questionDao().getCount()
+                    } catch (e: Exception) {
+                        Log.e("QuestionBankManage", "数据库查询异常: ${e.message}", e)
                     }
-                    val count = db.questionDao().getCount()
-                    Pair(itemList, count)
                 }
-                subjects = items
+                // 状态修改必须在主线程
+                subjects = loadedItems
                 totalCount = allCount
                 // 清理已不存在的选中项
-                val validSubjects = items.map { it.subject }.toSet()
+                val validSubjects = loadedItems.map { it.subject }.toSet()
                 selectedSubjects = selectedSubjects.filter { it in validSubjects }.toSet()
                 isLoading = false
             } catch (e: Exception) {
                 Log.e("QuestionBankManage", "加载题库数据异常: ${e.message}", e)
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(context, "加载题库数据失败: ${e.message}", Toast.LENGTH_SHORT).show()
-                }
+                Toast.makeText(context, "加载题库数据失败: ${e.message}", Toast.LENGTH_SHORT).show()
                 isLoading = false
             }
         }
