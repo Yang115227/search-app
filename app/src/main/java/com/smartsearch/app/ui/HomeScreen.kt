@@ -129,15 +129,34 @@ class HomeActivity : ComponentActivity() {
                     result.data!!,
                     null // 选区由后续选题框回调传入
                 )
-                Log.d("【SCREEN_RECORD_LOG】", "MediaProjection初始化和VirtualDisplay创建完成")
-                // 第3步：延迟300ms后切换到录屏模式，显示选题框
-                // 延迟原因：部分ROM在MediaProjection+前台服务同步启动瞬间会短暂阻塞顶层窗口渲染，
-                // 延迟创建选区窗口可以有效规避此渲染冲突。
-                Handler(Looper.getMainLooper()).postDelayed({
-                    FloatWindowManager.showSelectOverlayForScreenCapture(this)
-                    Toast.makeText(this, "录屏模式已启动，请框选题目区域", Toast.LENGTH_SHORT).show()
-                    Log.d("【SCREEN_RECORD_LOG】", "录屏搜题启动全流程完成")
-                }, 300)
+                Log.d("【SCREEN_RECORD_LOG】", "setProjection Intent已发送，等待Service初始化完成")
+
+                // 第3步：强制切换到主线程执行后续UI逻辑（核心修复）
+                // 原因：startForegroundService/setProjection 通过Intent触发Service的onStartCommand，
+                // onStartCommand 在当前主线程消息处理完成后才执行。通过 Handler.post 将后续代码
+                // 调度到主线程消息队列末尾，确保 Service 的 VirtualDisplay 初始化完成后再执行。
+                Handler(Looper.getMainLooper()).post(Runnable {
+                    try {
+                        // 第4步：额外延迟200ms，避免VirtualDisplay初始化与悬浮窗创建同时抢占渲染资源
+                        Handler(Looper.getMainLooper()).postDelayed({
+                            try {
+                                Log.d("【SCREEN_RECORD_LOG】", "准备调用showSelectOverlay")
+                                FloatWindowManager.showSelectOverlayForScreenCapture(this)
+                                Toast.makeText(this, "录屏模式已启动，请框选题目区域", Toast.LENGTH_SHORT).show()
+                                Log.d("【SCREEN_RECORD_LOG】", "录屏搜题启动全流程完成")
+                            } catch (e: Exception) {
+                                Log.e("【SCREEN_RECORD_LOG】", "showSelectOverlay 异常: ${e.message}", e)
+                                Toast.makeText(this, "启动录屏搜题失败，已切换到无障碍模式", Toast.LENGTH_LONG).show()
+                                // 降级到无障碍模式
+                                try { startAccessibilitySearch() } catch (_: Exception) { }
+                            }
+                        }, 200)
+                    } catch (e: Exception) {
+                        Log.e("【SCREEN_RECORD_LOG】", "主线程调度Runnable异常: ${e.message}", e)
+                        Toast.makeText(this, "启动录屏搜题失败", Toast.LENGTH_LONG).show()
+                        try { startAccessibilitySearch() } catch (_: Exception) { }
+                    }
+                })
             } catch (e: Exception) {
                 Log.e("【SCREEN_RECORD_LOG】", "启动录屏服务异常: ${e.message}", e)
                 Toast.makeText(this, "启动录屏失败，已切换到无障碍模式", Toast.LENGTH_LONG).show()
