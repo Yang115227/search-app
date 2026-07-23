@@ -109,8 +109,8 @@ class FloatingWindowService : Service() {
         val onClick: () -> Unit     // 点击回调
     )
 
-    /** 根据搜题模式获取悬浮球配置 */
-    private fun getConfigForMode(mode: FloatWindowManager.SearchMode): FloatBallConfig {
+    /** 根据搜题模式获取悬浮球配置，CAMERA 模式不显示悬浮球 */
+    private fun getConfigForMode(mode: FloatWindowManager.SearchMode): FloatBallConfig? {
         return when (mode) {
             FloatWindowManager.SearchMode.ACCESSIBILITY -> FloatBallConfig(
                 label = "无",
@@ -124,12 +124,7 @@ class FloatingWindowService : Service() {
                 defaultYRatio = 0.35f,
                 onClick = { startScreenCaptureMode() }
             )
-            FloatWindowManager.SearchMode.CAMERA -> FloatBallConfig(
-                label = "扫",
-                color = Color.parseColor("#FF9800"),
-                defaultYRatio = 0.35f,
-                onClick = { triggerCameraSearch() }
-            )
+            FloatWindowManager.SearchMode.CAMERA -> null // 扫描搜题不显示悬浮球
         }
     }
 
@@ -257,12 +252,13 @@ class FloatingWindowService : Service() {
     /**
      * 为指定模式创建并显示悬浮球。
      * 先移除当前球，再创建新模式对应的球。
+     * CAMERA 模式不显示悬浮球。
      */
     private fun attachBallForMode(mode: FloatWindowManager.SearchMode) {
         // 先移除当前球
         detachCurrentBall()
 
-        val config = getConfigForMode(mode)
+        val config = getConfigForMode(mode) ?: return // CAMERA 模式不显示
         val ball = FloatingBallView(this, config)
         val params = createBallParams(config.defaultYRatio)
         ball.ballParams = params

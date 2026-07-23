@@ -162,10 +162,10 @@ object FloatWindowManager {
                 startContinuousSearch(ctx)
             }
 
-            // 连续搜题模式下，选区变化触发重新搜题
+            // 选区变化时更新保存（记忆功能）
             onSelectionChanged = { rect ->
+                lastSelectionRect = rect
                 if (currentState == FloatWindowState.CONTINUOUS_SEARCHING) {
-                    lastSelectionRect = rect
                     this@FloatWindowManager.onContinuousSearch?.invoke(rect)
                 }
             }

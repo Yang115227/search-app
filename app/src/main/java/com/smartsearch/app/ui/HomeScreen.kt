@@ -443,8 +443,13 @@ class HomeActivity : ComponentActivity() {
             // 第 3 步：弹出系统录屏权限对话框
             val projectionManager = getSystemService(
                 android.content.Context.MEDIA_PROJECTION_SERVICE
-            ) as android.media.projection.MediaProjectionManager
-            screenCaptureLauncher.launch(projectionManager.createScreenCaptureIntent())
+            ) as? android.media.projection.MediaProjectionManager
+            if (projectionManager != null) {
+                screenCaptureLauncher.launch(projectionManager.createScreenCaptureIntent())
+            } else {
+                Log.e(TAG, "无法获取 MediaProjectionManager")
+                Toast.makeText(this, "设备不支持录屏功能", Toast.LENGTH_LONG).show()
+            }
         } catch (e: Exception) {
             Log.e(TAG, "启动录屏搜题异常: ${e.message}", e)
             Toast.makeText(this, "启动录屏搜题失败，请重试", Toast.LENGTH_LONG).show()
