@@ -157,8 +157,10 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
      * 用于连续搜题模式下点击「选区」按钮重新唤起选区框时恢复上次选区。
      */
     fun setSelectionRect(rect: android.graphics.Rect) {
+        Log.d("【SELECT_LOG】", "setSelectionRect 入口: rect=(${rect.left},${rect.top},${rect.right},${rect.bottom}) screen=${screenWidth}x${screenHeight}")
         // 边界适配：确保选区不超出屏幕范围
         val clampedRect = clampRectToScreen(rect)
+        Log.d("【SELECT_LOG】", "setSelectionRect clamp后: clamped=(${clampedRect.left},${clampedRect.top},${clampedRect.right},${clampedRect.bottom})")
         selectionRect.set(
             clampedRect.left.toFloat(),
             clampedRect.top.toFloat(),
@@ -168,6 +170,7 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
         // 强制刷新视图：invalidate 重绘 Canvas，requestLayout 触发父布局重新测量
         invalidate()
         requestLayout()
+        Log.d("【SELECT_LOG】", "setSelectionRect 完成: invalidate+requestLayout 已调用")
     }
 
     /**
@@ -560,6 +563,7 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
                 // 约束在屏幕边界内
                 clampToScreen()
                 invalidate()
+                Log.d("【SELECT_LOG】", "handleTouchMove DRAG: rect=(${selectionRect.left.toInt()},${selectionRect.top.toInt()},${selectionRect.right.toInt()},${selectionRect.bottom.toInt()})")
             }
 
             TouchMode.RESIZE -> {
@@ -581,6 +585,7 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
 
                 selectionRect.set(resizeAnchorX, resizeAnchorY, newRight, newBottom)
                 invalidate()
+                Log.d("【SELECT_LOG】", "handleTouchMove RESIZE: rect=(${selectionRect.left.toInt()},${selectionRect.top.toInt()},${selectionRect.right.toInt()},${selectionRect.bottom.toInt()})")
             }
 
             TouchMode.NONE -> { /* 不处理 */ }
@@ -601,12 +606,15 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
                 selectionRect.right.toInt(),
                 selectionRect.bottom.toInt()
             )
+            Log.d("【SELECT_LOG】", "handleTouchUp: touchMode=$touchMode rect=(${rect.left},${rect.top},${rect.right},${rect.bottom}) isAdjustmentMode=$isAdjustmentMode isContinuousMode=$isContinuousMode")
 
             if (isAdjustmentMode) {
                 // 调整模式：手指抬起后自动隐藏，触发调整完成回调
+                Log.d("【SELECT_LOG】", "handleTouchUp: 触发 onAdjustmentComplete")
                 onAdjustmentComplete?.invoke(rect)
             } else if (isContinuousMode) {
                 // 连续搜题模式：拖拽/缩放完成后触发重新搜题
+                Log.d("【SELECT_LOG】", "handleTouchUp: 触发 onSelectionChanged")
                 onSelectionChanged?.invoke(rect)
             }
         }

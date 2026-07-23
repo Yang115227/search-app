@@ -78,12 +78,14 @@ fun QuestionBankManageScreen(
     LaunchedEffect(refreshTrigger, refreshKey) {
         isLoading = true
         dbInitFailed = false
+        Log.d("【DB_LOG】", "题库管理 LaunchedEffect 开始: refreshTrigger=$refreshTrigger refreshKey=$refreshKey")
         try {
             // 数据库初始化可能在 IO 线程失败，捕获后展示占位页
             val db = try {
                 QuizDatabase.getInstance(context)
+                Log.d("【DB_LOG】", "QuizDatabase 初始化成功")
             } catch (e: Exception) {
-                Log.e("QuestionBankManage", "数据库初始化异常: ${e.message}", e)
+                Log.e("【DB_LOG】", "数据库初始化异常: ${e.message}", e)
                 dbInitFailed = true
                 isLoading = false
                 return@LaunchedEffect
@@ -92,23 +94,27 @@ fun QuestionBankManageScreen(
             var allCount = 0
             withContext(Dispatchers.IO) {
                 try {
+                    Log.d("【DB_LOG】", "开始 IO 线程查询数据库")
                     val allSubjects = db.questionDao().getAllSubjects()
+                    Log.d("【DB_LOG】", "查询 getAllSubjects 结果: ${allSubjects.size} 条")
                     loadedItems = allSubjects.map { subject ->
                         SubjectManageItem(subject, db.questionDao().getCountBySubject(subject))
                     }
                     allCount = db.questionDao().getCount()
+                    Log.d("【DB_LOG】", "查询完成: loadedItems=${loadedItems.size} totalCount=$allCount")
                 } catch (e: Exception) {
-                    Log.e("QuestionBankManage", "数据库查询异常: ${e.message}", e)
+                    Log.e("【DB_LOG】", "数据库查询异常: ${e.message}", e)
                 }
             }
             // 状态修改必须在主线程
+            Log.d("【DB_LOG】", "切换到主线程更新 UI: subjects 大小=${loadedItems.size}")
             subjects = loadedItems
             totalCount = allCount
             // 清理已不存在的选中项
             val validSubjects = loadedItems.map { it.subject }.toSet()
             selectedSubjects = selectedSubjects.filter { it in validSubjects }.toSet()
         } catch (e: Exception) {
-            Log.e("QuestionBankManage", "加载题库数据异常: ${e.message}", e)
+            Log.e("【DB_LOG】", "加载题库数据异常: ${e.message}", e)
             dbInitFailed = true
             Toast.makeText(context, "加载题库数据失败: ${e.message}", Toast.LENGTH_SHORT).show()
         } finally {

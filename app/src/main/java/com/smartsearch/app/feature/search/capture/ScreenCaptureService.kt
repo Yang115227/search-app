@@ -155,6 +155,7 @@ class ScreenCaptureService : Service() {
          * @param context 上下文
          */
         fun startForegroundOnly(context: Context) {
+            Log.d("【SCREEN_RECORD_LOG】", "startForegroundOnly: 启动前台服务")
             val intent = Intent(context, ScreenCaptureService::class.java).apply {
                 action = ACTION_PREPARE_CAPTURE
             }
@@ -163,6 +164,7 @@ class ScreenCaptureService : Service() {
             } else {
                 context.startService(intent)
             }
+            Log.d("【SCREEN_RECORD_LOG】", "startForegroundOnly: 前台服务启动Intent已发送")
         }
 
         /**
@@ -174,6 +176,7 @@ class ScreenCaptureService : Service() {
          * @param selectionRect 选区矩形（可为 null，后续通过 updateSelectionRect 设置）
          */
         fun setProjection(context: Context, projectionIntent: Intent, selectionRect: Rect?) {
+            Log.d("【SCREEN_RECORD_LOG】", "setProjection: 发送 MediaProjection Intent 给录屏服务")
             val intent = Intent(context, ScreenCaptureService::class.java).apply {
                 action = ACTION_SET_PROJECTION
                 putExtra(EXTRA_PROJECTION_INTENT, projectionIntent)
@@ -284,20 +287,23 @@ class ScreenCaptureService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        Log.d("【SCREEN_RECORD_LOG】", "onStartCommand: action=${intent?.action ?: "null"} flags=$flags startId=$startId")
         try {
             // 任何情况下都确保前台通知已启动（防止系统判定"未在时限内启动前台服务"）
             if (!isForegroundStarted) {
+                Log.d("【SCREEN_RECORD_LOG】", "onStartCommand: 启动前台通知")
                 startForegroundNotification()
             }
 
             if (intent == null) {
                 // 服务被系统重建但无 Intent → 尝试恢复
-                Log.w(TAG, "服务重建，无 Intent 数据")
+                Log.w("【SCREEN_RECORD_LOG】", "服务重建，无 Intent 数据")
                 return START_NOT_STICKY
             }
 
             when (intent.action) {
                 ACTION_START_CAPTURE -> {
+                    Log.d("【SCREEN_RECORD_LOG】", "onStartCommand: ACTION_START_CAPTURE")
                     // 获取 MediaProjection Intent
                     val projectionIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                         intent.getParcelableExtra(EXTRA_PROJECTION_INTENT, Intent::class.java)
@@ -314,17 +320,19 @@ class ScreenCaptureService : Service() {
                         intent.getParcelableExtra(EXTRA_SELECTION_RECT)
                     }
 
+                    Log.d("【SCREEN_RECORD_LOG】", "onStartCommand: projectionIntent=${projectionIntent != null} rect=$rect")
                     if (projectionIntent != null) {
                         startCapture(projectionIntent, rect)
                     } else {
                         // 没有 MediaProjection Intent → 尝试自动切回无障碍模式
-                        Log.w(TAG, "缺少 MediaProjection Intent，切换到无障碍模式")
+                        Log.w("【SCREEN_RECORD_LOG】", "缺少 MediaProjection Intent，切换到无障碍模式")
                         switchToAccessibilityMode()
                         stopSelf()
                     }
                 }
 
                 ACTION_CAPTURE_ONCE -> {
+                    Log.d("【SCREEN_RECORD_LOG】", "onStartCommand: ACTION_CAPTURE_ONCE")
                     // 单次截图请求（用于 OCR 识别后重新截图）
                     captureOnce()
                 }
@@ -494,20 +502,22 @@ class ScreenCaptureService : Service() {
      * @param rect 用户选区矩形（屏幕坐标），可为 null（后续通过 updateSelectionRect 设置）
      */
     private fun startCapture(projectionIntent: Intent, rect: Rect?) {
+        Log.d("【SCREEN_RECORD_LOG】", "startCapture 入口: rect=${rect?.let { "(${it.left},${it.top},${it.right},${it.bottom})" } ?: "null"}")
         try {
             this.selectionRect = rect
 
             // 先通过 ScreenCaptureManager 释放旧实例（全局单例管理）
             try {
                 if (ScreenCaptureManager.isActive) {
-                    Log.w(TAG, "录屏采集已在进行中，先销毁旧实例")
+                    Log.w("【SCREEN_RECORD_LOG】", "录屏采集已在进行中，先销毁旧实例")
                     ScreenCaptureManager.releaseAll()
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "销毁旧采集实例异常: ${e.message}", e)
+                Log.e("【SCREEN_RECORD_LOG】", "销毁旧采集实例异常: ${e.message}", e)
             }
 
             // 启动前台服务
+            Log.d("【SCREEN_RECORD_LOG】", "startCapture: 启动前台通知")
             startForegroundNotification()
 
             // 标记录屏权限已授予
@@ -883,14 +893,21 @@ class ScreenCaptureService : Service() {
      * 全链路异常捕获，杜绝闪退。
      */
     fun stopCapture() {
+        Log.d("【SCREEN_RECORD_LOG】", "stopCapture 入口")
         try {
             isCapturing = false
 
             // 清除录屏授权标记
-            try { PermissionManager.clearScreenCaptureGranted(this) } catch (_: Exception) { }
+            try {
+                PermissionManager.clearScreenCaptureGranted(this)
+                Log.d("【SCREEN_RECORD_LOG】", "stopCapture: 清除录屏授权标记")
+            } catch (_: Exception) { }
 
             // 使用 ScreenCaptureManager 释放 MediaProjection/VirtualDisplay/ImageReader 资源
-            try { ScreenCaptureManager.releaseAll() } catch (_: Exception) { }
+            try {
+                ScreenCaptureManager.releaseAll()
+                Log.d("【SCREEN_RECORD_LOG】", "stopCapture: ScreenCaptureManager.releaseAll 完成")
+            } catch (_: Exception) { }
 
             // 清理本地引用
             mediaProjection = null
@@ -901,13 +918,14 @@ class ScreenCaptureService : Service() {
             if (isForegroundStarted) {
                 try {
                     stopForeground(STOP_FOREGROUND_REMOVE)
+                    Log.d("【SCREEN_RECORD_LOG】", "stopCapture: 前台服务已停止")
                 } catch (_: Exception) { }
                 isForegroundStarted = false
             }
 
-            Log.d(TAG, "录屏采集已停止，所有资源已释放")
+            Log.d("【SCREEN_RECORD_LOG】", "stopCapture: 完成，所有资源已释放")
         } catch (e: Exception) {
-            Log.e(TAG, "stopCapture 异常: ${e.message}", e)
+            Log.e("【SCREEN_RECORD_LOG】", "stopCapture 异常: ${e.message}", e)
         }
     }
 

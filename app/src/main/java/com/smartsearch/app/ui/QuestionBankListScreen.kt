@@ -137,16 +137,21 @@ fun QuestionBankListScreen(
                         onClick = {
                             scope.launch {
                                 isCheckingQuestions = true
+                                Log.d("【PRACTICE_LOG】", "开始练习按钮点击: selectedSubject=$selectedSubject mode=$selectedMode")
                                 try {
                                     val db = QuizDatabase.getInstance(context)
+                                    Log.d("【PRACTICE_LOG】", "QuizDatabase 获取成功")
                                     val checkResult = withContext(Dispatchers.IO) {
                                         try {
                                             // ① 二次校验：用选中的题库ID查询数据库，校验题库是否已被删除
                                             val subjectToCheck = selectedSubject
+                                            Log.d("【PRACTICE_LOG】", "IO线程: 二次校验 subjectToCheck=$subjectToCheck")
                                             if (subjectToCheck.isNotEmpty()) {
                                                 val subjects = db.questionDao().getAllSubjects()
+                                                Log.d("【PRACTICE_LOG】", "IO线程: getAllSubjects 结果=${subjects.size}条, 是否包含=${subjectToCheck in subjects}")
                                                 if (subjectToCheck !in subjects) {
                                                     // 题库已被删除
+                                                    Log.d("【PRACTICE_LOG】", "题库已被删除!")
                                                     return@withContext Pair(true, 0)
                                                 }
                                             }
@@ -156,13 +161,16 @@ fun QuestionBankListScreen(
                                             } else {
                                                 db.questionDao().getCountBySubject(selectedSubject)
                                             }
+                                            Log.d("【PRACTICE_LOG】", "IO线程: 题目数量查询结果=$count")
                                             Pair(false, count)
                                         } catch (e: Exception) {
-                                            Log.e("QuestionBankList", "查询题目数量异常: ${e.message}", e)
+                                            Log.e("【PRACTICE_LOG】", "题库查询异常: ${e.message}", e)
                                             Pair(false, -1)
                                         }
                                     }
+                                    Log.d("【PRACTICE_LOG】", "校验结果: deleted=${checkResult.first} count=${checkResult.second}")
                                     if (checkResult.first) {
+                                        Log.d("【PRACTICE_LOG】", "题库已删除, 拦截跳转")
                                         Toast.makeText(
                                             context,
                                             "该题库已被删除，请重新选择",
@@ -171,6 +179,7 @@ fun QuestionBankListScreen(
                                         // 刷新列表（全在 IO 线程执行）
                                         withContext(Dispatchers.IO) {
                                             try {
+                                                Log.d("【PRACTICE_LOG】", "刷新列表")
                                                 val allSubjects = db.questionDao().getAllSubjects()
                                                 val loadedSubjects = allSubjects.map { subject ->
                                                     SubjectCountItem(subject, db.questionDao().getCountBySubject(subject))
@@ -179,17 +188,20 @@ fun QuestionBankListScreen(
                                                 withContext(Dispatchers.Main) {
                                                     subjects = loadedSubjects
                                                     selectedSubject = if (loadedSubjects.isNotEmpty()) loadedSubjects.first().subject else ""
+                                                    Log.d("【PRACTICE_LOG】", "列表刷新完成: ${loadedSubjects.size}条")
                                                 }
                                             } catch (_: Exception) { }
                                         }
                                     } else if (checkResult.second == 0) {
                                         // 空列表拦截
+                                        Log.d("【PRACTICE_LOG】", "题目列表为空, 拦截跳转")
                                         Toast.makeText(
                                             context,
                                             if (selectedSubject.isEmpty()) "题库中暂无题目，请先导入" else "该学科暂无题目，请先导入",
                                             Toast.LENGTH_SHORT
                                         ).show()
                                     } else if (checkResult.second < 0) {
+                                        Log.d("【PRACTICE_LOG】", "查询异常 count<0")
                                         Toast.makeText(
                                             context,
                                             "查询题目数量异常，请重试",
@@ -197,15 +209,17 @@ fun QuestionBankListScreen(
                                         ).show()
                                     } else {
                                         // count > 0，跳转答题页
+                                        Log.d("【PRACTICE_LOG】", "校验通过, 跳转答题页: subject=$selectedSubject mode=$selectedMode")
                                         if (selectedSubject.isNotBlank()) {
                                             onStartPractice(selectedSubject, selectedMode)
                                         } else {
                                             // 空字符串兜底：跳转全部题库
+                                            Log.d("【PRACTICE_LOG】", "subject为空, 兜底为全部题库")
                                             onStartPractice("", selectedMode)
                                         }
                                     }
                                 } catch (e: Exception) {
-                                    Log.e("QuestionBankList", "获取数据库实例异常: ${e.message}", e)
+                                    Log.e("【PRACTICE_LOG】", "开始练习异常: ${e.message}", e)
                                     Toast.makeText(
                                         context,
                                         "数据库访问异常，请重试",

@@ -157,18 +157,19 @@ object FloatWindowManager {
             try {
                 val modeKey = getModeKey(mode ?: currentSearchMode)
                 val orientationSuffix = getOrientationSuffix(context)
+                val spKey = "${modeKey}${orientationSuffix}_"
                 // 扣除状态栏、导航栏高度，存储为应用可视区域坐标
                 val appRect = screenToAppRect(context, rawRect)
-                Log.d("SelectionPrefs", "save: mode=$modeKey$orientationSuffix appRect=$appRect raw=$rawRect")
+                Log.d("【SELECT_LOG】", "save: PREFS=$PREFS_NAME modeKey=$modeKey suffix=$orientationSuffix spKey=${spKey}left appRect=(${appRect.left},${appRect.top},${appRect.right},${appRect.bottom}) raw=(${rawRect.left},${rawRect.top},${rawRect.right},${rawRect.bottom})")
                 context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                     .edit()
-                    .putInt("${modeKey}${orientationSuffix}_$KEY_LEFT", appRect.left)
-                    .putInt("${modeKey}${orientationSuffix}_$KEY_TOP", appRect.top)
-                    .putInt("${modeKey}${orientationSuffix}_$KEY_RIGHT", appRect.right)
-                    .putInt("${modeKey}${orientationSuffix}_$KEY_BOTTOM", appRect.bottom)
+                    .putInt("${spKey}$KEY_LEFT", appRect.left)
+                    .putInt("${spKey}$KEY_TOP", appRect.top)
+                    .putInt("${spKey}$KEY_RIGHT", appRect.right)
+                    .putInt("${spKey}$KEY_BOTTOM", appRect.bottom)
                     .commit() // 同步落盘，防止进程被杀丢失
             } catch (e: Exception) {
-                Log.e("SelectionPrefs", "保存选区失败: ${e.message}", e)
+                Log.e("【SELECT_LOG】", "save 异常: ${e.message}", e)
             }
         }
 
@@ -181,32 +182,36 @@ object FloatWindowManager {
             try {
                 val modeKey = getModeKey(mode ?: currentSearchMode)
                 val orientationSuffix = getOrientationSuffix(context)
+                val spKey = "${modeKey}${orientationSuffix}_"
                 val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                val left = prefs.getInt("${modeKey}${orientationSuffix}_$KEY_LEFT", -1)
-                val top = prefs.getInt("${modeKey}${orientationSuffix}_$KEY_TOP", -1)
-                val right = prefs.getInt("${modeKey}${orientationSuffix}_$KEY_RIGHT", -1)
-                val bottom = prefs.getInt("${modeKey}${orientationSuffix}_$KEY_BOTTOM", -1)
+                val left = prefs.getInt("${spKey}$KEY_LEFT", -1)
+                val top = prefs.getInt("${spKey}$KEY_TOP", -1)
+                val right = prefs.getInt("${spKey}$KEY_RIGHT", -1)
+                val bottom = prefs.getInt("${spKey}$KEY_BOTTOM", -1)
+                Log.d("【SELECT_LOG】", "load: PREFS=$PREFS_NAME spKey=${spKey}left 读取值=($left,$top,$right,$bottom)")
                 if (left < 0 || top < 0 || right < 0 || bottom < 0) {
                     // 当前方向无数据，尝试兼容旧版（无方向后缀）
-                    val leftFallback = prefs.getInt("${modeKey}_$KEY_LEFT", -1)
-                    val topFallback = prefs.getInt("${modeKey}_$KEY_TOP", -1)
-                    val rightFallback = prefs.getInt("${modeKey}_$KEY_RIGHT", -1)
-                    val bottomFallback = prefs.getInt("${modeKey}_$KEY_BOTTOM", -1)
+                    val legacyKey = "${modeKey}_"
+                    val leftFallback = prefs.getInt("${legacyKey}$KEY_LEFT", -1)
+                    val topFallback = prefs.getInt("${legacyKey}$KEY_TOP", -1)
+                    val rightFallback = prefs.getInt("${legacyKey}$KEY_RIGHT", -1)
+                    val bottomFallback = prefs.getInt("${legacyKey}$KEY_BOTTOM", -1)
+                    Log.d("【SELECT_LOG】", "load: 当前方向无数据, 尝试旧版key=${legacyKey}left 值=($leftFallback,$topFallback,$rightFallback,$bottomFallback)")
                     if (leftFallback < 0 || topFallback < 0 || rightFallback < 0 || bottomFallback < 0) {
-                        Log.d("SelectionPrefs", "load: mode=$modeKey$orientationSuffix 无历史记录")
+                        Log.d("【SELECT_LOG】", "load: 无历史记录, 返回null")
                         return null
                     }
                     val appRect = Rect(leftFallback, topFallback, rightFallback, bottomFallback)
                     val clampedRect = clampToScreenBounds(context, appRect)
-                    Log.d("SelectionPrefs", "load(legacy): mode=$modeKey appRect=$appRect clamped=$clampedRect")
+                    Log.d("【SELECT_LOG】", "load(legacy): 返回 clamped=(${clampedRect.left},${clampedRect.top},${clampedRect.right},${clampedRect.bottom})")
                     return clampedRect
                 }
                 val appRect = Rect(left, top, right, bottom)
                 val clampedRect = clampToScreenBounds(context, appRect)
-                Log.d("SelectionPrefs", "load: mode=$modeKey$orientationSuffix appRect=$appRect clamped=$clampedRect")
+                Log.d("【SELECT_LOG】", "load: 返回 clamped=(${clampedRect.left},${clampedRect.top},${clampedRect.right},${clampedRect.bottom})")
                 return clampedRect
             } catch (e: Exception) {
-                Log.e("SelectionPrefs", "加载选区失败: ${e.message}", e)
+                Log.e("【SELECT_LOG】", "load 异常: ${e.message}", e)
                 return null
             }
         }
@@ -357,6 +362,7 @@ object FloatWindowManager {
      */
     fun showSelectOverlay(context: Context, onSearch: (Rect) -> Unit) {
         val ctx = context.applicationContext
+        Log.d("【SELECT_LOG】", "showSelectOverlay 入口: mode=${currentSearchMode} state=${currentState}")
         // 缓存回调
         this.onRectSelected = onSearch
         this.onContinuousSearch = onSearch
@@ -368,19 +374,27 @@ object FloatWindowManager {
 
         // 如果已有选题框，不重复创建
         if (currentState == FloatWindowState.SELECTING ||
-            currentState == FloatWindowState.CONTINUOUS_SEARCHING) return
+            currentState == FloatWindowState.CONTINUOUS_SEARCHING) {
+            Log.d("【SELECT_LOG】", "showSelectOverlay: 已有选题框, 跳过创建")
+            return
+        }
 
         selectOverlay = FloatSelectOverlay(ctx).apply {
             // 恢复上次选区位置：先从内存加载，内存没有则从持久化存储加载（按当前模式分键）
             var savedRect = this@FloatWindowManager.lastSelectionRect
+            Log.d("【SELECT_LOG】", "showSelectOverlay: 内存中 lastSelectionRect=${savedRect?.let { "(${it.left},${it.top},${it.right},${it.bottom})" } ?: "null"}")
             if (savedRect == null) {
                 savedRect = SelectionPrefs.load(ctx, currentSearchMode)
+                Log.d("【SELECT_LOG】", "showSelectOverlay: SP加载结果=${savedRect?.let { "(${it.left},${it.top},${it.right},${it.bottom})" } ?: "null"}")
                 if (savedRect != null) {
                     this@FloatWindowManager.lastSelectionRect = savedRect
                 }
             }
             if (savedRect != null) {
+                Log.d("【SELECT_LOG】", "showSelectOverlay: 调用 setSelectionRect 加载历史选区")
                 setSelectionRect(savedRect)
+            } else {
+                Log.d("【SELECT_LOG】", "showSelectOverlay: 无历史选区, 使用默认居中选区")
             }
 
             // 点击 X 关闭按钮 → 销毁
@@ -390,6 +404,7 @@ object FloatWindowManager {
 
             // 点击"开始搜题" → 进入连续搜题模式
             onStartContinuousSearch = { rect ->
+                Log.d("【SELECT_LOG】", "showSelectOverlay onStartContinuousSearch: rect=(${rect.left},${rect.top},${rect.right},${rect.bottom}) mode=${currentSearchMode}")
                 // 保存选区（内存 + 持久化，按模式分键）
                 lastSelectionRect = rect
                 SelectionPrefs.save(ctx, rect, currentSearchMode)
@@ -401,6 +416,7 @@ object FloatWindowManager {
 
             // 选区变化时立即落盘保存（记忆功能）
             onSelectionChanged = { rect ->
+                Log.d("【SELECT_LOG】", "showSelectOverlay onSelectionChanged: rect=(${rect.left},${rect.top},${rect.right},${rect.bottom}) mode=${currentSearchMode}")
                 lastSelectionRect = rect
                 SelectionPrefs.save(ctx, rect, currentSearchMode)
                 if (currentState == FloatWindowState.CONTINUOUS_SEARCHING) {

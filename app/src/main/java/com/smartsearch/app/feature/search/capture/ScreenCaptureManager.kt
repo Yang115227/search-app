@@ -74,30 +74,35 @@ object ScreenCaptureManager {
      * @return 新创建的 MediaProjection，失败返回 null
      */
     fun createMediaProjection(context: Context, projectionIntent: Intent): MediaProjection? {
+        Log.d("【SCREEN_RECORD_LOG】", "createMediaProjection 入口: 先销毁旧实例")
         // 先销毁旧实例
         destroyMediaProjection()
 
         try {
-            val manager = getProjectionManager(context) ?: return null
+            val manager = getProjectionManager(context)
+            if (manager == null) {
+                Log.e("【SCREEN_RECORD_LOG】", "createMediaProjection: MediaProjectionManager 获取失败")
+                return null
+            }
             val projection = manager.getMediaProjection(Activity.RESULT_OK, projectionIntent)
             if (projection == null) {
-                Log.e(TAG, "getMediaProjection 返回 null")
+                Log.e("【SCREEN_RECORD_LOG】", "createMediaProjection: getMediaProjection 返回 null")
                 return null
             }
             // 注册停止回调
             projection.registerCallback(object : MediaProjection.Callback() {
                 override fun onStop() {
-                    Log.w(TAG, "MediaProjection 已停止")
+                    Log.w("【SCREEN_RECORD_LOG】", "MediaProjection 已停止（系统回收）")
                     isActive = false
                     mediaProjection = null
                 }
             }, Handler(context.mainLooper))
 
             mediaProjection = projection
-            Log.d(TAG, "MediaProjection 已创建")
+            Log.d("【SCREEN_RECORD_LOG】", "MediaProjection 已创建成功")
             return projection
         } catch (e: Exception) {
-            Log.e(TAG, "创建 MediaProjection 异常: ${e.message}", e)
+            Log.e("【SCREEN_RECORD_LOG】", "创建 MediaProjection 异常: ${e.message}", e)
             return null
         }
     }
@@ -116,6 +121,7 @@ object ScreenCaptureManager {
         onImageAvailable: (ImageReader) -> Unit,
         backgroundHandler: Handler
     ): ImageReader? {
+        Log.d("【SCREEN_RECORD_LOG】", "createVirtualDisplay 入口: 先销毁旧实例")
         // 先销毁旧实例
         destroyVirtualDisplay()
 
@@ -130,7 +136,7 @@ object ScreenCaptureManager {
                 try {
                     onImageAvailable(reader)
                 } catch (e: Exception) {
-                    Log.e(TAG, "ImageReader 回调异常: ${e.message}", e)
+                    Log.e("【SCREEN_RECORD_LOG】", "ImageReader 回调异常: ${e.message}", e)
                 }
             }, backgroundHandler)
 
@@ -146,7 +152,7 @@ object ScreenCaptureManager {
             )
 
             if (vd == null) {
-                Log.e(TAG, "createVirtualDisplay 返回 null")
+                Log.e("【SCREEN_RECORD_LOG】", "createVirtualDisplay 返回 null")
                 reader.close()
                 return null
             }
@@ -154,10 +160,10 @@ object ScreenCaptureManager {
             virtualDisplay = vd
             imageReader = reader
             isActive = true
-            Log.d(TAG, "VirtualDisplay 已创建: ${screenWidth}x${screenHeight}")
+            Log.d("【SCREEN_RECORD_LOG】", "VirtualDisplay 已创建: ${screenWidth}x${screenHeight}")
             return reader
         } catch (e: Exception) {
-            Log.e(TAG, "创建 VirtualDisplay 异常: ${e.message}", e)
+            Log.e("【SCREEN_RECORD_LOG】", "创建 VirtualDisplay 异常: ${e.message}", e)
             return null
         }
     }
@@ -196,10 +202,11 @@ object ScreenCaptureManager {
      * 释放所有资源（MediaProjection + VirtualDisplay + ImageReader）。
      */
     fun releaseAll() {
+        Log.d("【SCREEN_RECORD_LOG】", "releaseAll: 释放所有录屏资源")
         destroyVirtualDisplay()
         destroyMediaProjection()
         isActive = false
-        Log.d(TAG, "所有录屏资源已释放")
+        Log.d("【SCREEN_RECORD_LOG】", "releaseAll: 完成，所有录屏资源已释放")
     }
 
     /**
