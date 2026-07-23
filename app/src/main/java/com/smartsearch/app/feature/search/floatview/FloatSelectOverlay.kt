@@ -696,8 +696,12 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
         try {
             windowManager.addView(this, params)
             isAttached = true
+            Log.d("【SELECT_LOG】", "attachToWindow: addView 成功, screen=${screenWidth}x${screenHeight}")
         } catch (e: SecurityException) {
-            // 悬浮窗权限未授予，静默处理
+            Log.e("【SELECT_LOG】", "attachToWindow: addView 失败(SecurityException): ${e.message}")
+            isAttached = false
+        } catch (e: Exception) {
+            Log.e("【SELECT_LOG】", "attachToWindow: addView 异常: ${e.message}", e)
             isAttached = false
         }
     }

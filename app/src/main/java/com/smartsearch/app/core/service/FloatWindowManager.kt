@@ -390,13 +390,6 @@ object FloatWindowManager {
                     this@FloatWindowManager.lastSelectionRect = savedRect
                 }
             }
-            if (savedRect != null) {
-                Log.d("【SELECT_LOG】", "showSelectOverlay: 调用 setSelectionRect 加载历史选区")
-                setSelectionRect(savedRect)
-            } else {
-                Log.d("【SELECT_LOG】", "showSelectOverlay: 无历史选区, 使用默认居中选区")
-            }
-
             // 点击 X 关闭按钮 → 销毁
             onDismiss = {
                 destroyAll()
@@ -431,8 +424,17 @@ object FloatWindowManager {
                 SelectionPrefs.save(ctx, rect, currentSearchMode)
             }
 
-            // 附加到窗口
+            // 第1步：先附加到窗口，确保屏幕尺寸已初始化
             attachToWindow()
+            Log.d("【SELECT_LOG】", "showSelectOverlay: attachToWindow 完成, screen=${screenWidth}x${screenHeight}")
+
+            // 第2步：再设置历史选区（如果有），此时 screenWidth/screenHeight 已就绪，setSelectionRect 不会出现 screen=0x0
+            if (savedRect != null) {
+                Log.d("【SELECT_LOG】", "showSelectOverlay: 调用 setSelectionRect 加载历史选区")
+                setSelectionRect(savedRect)
+            } else {
+                Log.d("【SELECT_LOG】", "showSelectOverlay: 无历史选区, 使用默认居中选区")
+            }
         }
 
         currentState = FloatWindowState.SELECTING
