@@ -540,7 +540,34 @@ class ScreenCaptureService : Service() {
                 return
             }
 
+            // 注册 MediaProjection 停止监听：系统/用户强制收回录屏权限时自动清理资源
+            mediaProjection?.registerCallback(object : MediaProjection.Callback() {
+                override fun onStop() {
+                    Log.w(TAG, "MediaProjection 已停止（系统强制收回或用户撤销）")
+                    isCapturing = false
+                    // 释放全部资源
+                    try { ScreenCaptureManager.releaseAll() } catch (_: Exception) { }
+                    mediaProjection = null
+                    virtualDisplay = null
+                    imageReader = null
+                    // 弹窗提示并停止服务
+                    mainHandler.post {
+                        try {
+                            FloatWindowManager.showAnswerWindow(
+                                this@ScreenCaptureService,
+                                answer = "录屏权限已收回",
+                                explanation = "系统或用户已停止录屏权限，已自动清理资源。\n\n" +
+                                        "请重新授权录屏权限后继续使用。"
+                            )
+                        } catch (_: Exception) { }
+                        stopSelf()
+                    }
+                }
+            }, mainHandler)
+
             // 使用 ScreenCaptureManager 创建 VirtualDisplay + ImageReader（自动销毁旧实例）
+            // 释放顺序：先 VirtualDisplay → ImageReader → MediaProjection
+            try { ScreenCaptureManager.releaseAll() } catch (_: Exception) { }
             imageReader = ScreenCaptureManager.createVirtualDisplay(
                 mediaProjection!!,
                 { reader -> onImageAvailable(reader) },
