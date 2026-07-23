@@ -115,6 +115,7 @@ object ExcelImporter {
     /**
      * 清理数据库中已知的表头行脏数据。
      * 当之前的导入把 Excel 表头行误作为题目导入时，调用此方法删除。
+     * 匹配策略：先精确匹配已知表头关键词，再模糊匹配表头特征。
      */
     suspend fun cleanupHeaderRows(context: Context) {
         val db = QuizDatabase.getInstance(context)
@@ -123,12 +124,12 @@ object ExcelImporter {
             val allQuestions = dao.getAllQuestions()
             val headerQuestions = allQuestions.filter { q ->
                 q.question.isNotBlank() && q.question.length <= 15 &&
-                        KNOWN_HEADER_TEXTS.any { header ->
+                        (KNOWN_HEADER_TEXTS.any { header ->
                             q.question.trim().lowercase() == header
-                        }
+                        } || looksLikeHeader(q.question))
             }
             if (headerQuestions.isNotEmpty()) {
-                Log.w(TAG, "清理 ${headerQuestions.size} 条表头行脏数据")
+                Log.w(TAG, "清理 ${headerQuestions.size} 条表头行脏数据（${headerQuestions.map { it.question }}）")
                 headerQuestions.forEach { dao.delete(it) }
             }
         }

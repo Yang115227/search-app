@@ -341,8 +341,8 @@ fun QuestionBankManageScreen(
                         Text("删除", fontSize = 14.sp)
                     }
 
-                    // 批量删除按钮（选中一项及以上时显示）
-                    if (selectedSubjects.isNotEmpty()) {
+                    // 批量删除按钮（选中两项及以上时显示，避免与单删按钮重复）
+                    if (selectedSubjects.size >= 2) {
                         Button(
                             onClick = {
                                 isBatchDelete = true
