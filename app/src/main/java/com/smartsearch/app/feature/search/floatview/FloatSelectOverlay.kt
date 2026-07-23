@@ -165,7 +165,9 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
             clampedRect.right.toFloat(),
             clampedRect.bottom.toFloat()
         )
+        // 强制刷新视图：invalidate 重绘 Canvas，requestLayout 触发父布局重新测量
         invalidate()
+        requestLayout()
     }
 
     /**

@@ -582,9 +582,9 @@ class AccessibilitySearchService : AccessibilityService() {
         cancelThrottle()
         performScan()
 
-        // 持久化保存选区
+        // 持久化保存选区（使用统一 FloatWindowManager.SelectionPrefs，按无障碍模式分键存储）
         try {
-            SelectionPrefs.save(this, rect)
+            FloatWindowManager.SelectionPrefs.save(this, rect, FloatWindowManager.SearchMode.ACCESSIBILITY)
         } catch (e: Exception) {
             Log.e(TAG, "保存选区失败: ${e.message}", e)
         }
@@ -611,24 +611,10 @@ class AccessibilitySearchService : AccessibilityService() {
      */
     private fun restoreSelectionRect() {
         try {
-            val savedRect = SelectionPrefs.load(this) ?: return
-            val displayMetrics = resources.displayMetrics
-            val screenWidth = displayMetrics.widthPixels
-            val screenHeight = displayMetrics.heightPixels
-
-            // 越界适配：如果选区超出屏幕，缩放到边界内
-            val clampedRect = Rect(
-                savedRect.left.coerceIn(0, screenWidth),
-                savedRect.top.coerceIn(0, screenHeight),
-                savedRect.right.coerceIn(0, screenWidth),
-                savedRect.bottom.coerceIn(0, screenHeight)
-            )
-
-            // 如果完全越界（选区在屏幕外），忽略
-            if (clampedRect.width() <= 0 || clampedRect.height() <= 0) return
-
-            Log.d(TAG, "恢复上次选区: $clampedRect")
-            targetSelectionRect = RectF(clampedRect)
+            // 使用统一 FloatWindowManager.SelectionPrefs，按无障碍模式分键加载
+            val savedRect = FloatWindowManager.SelectionPrefs.load(this, FloatWindowManager.SearchMode.ACCESSIBILITY) ?: return
+            Log.d(TAG, "恢复上次选区: $savedRect")
+            targetSelectionRect = RectF(savedRect)
             // 触发一次扫描
             cancelThrottle()
             performScan()

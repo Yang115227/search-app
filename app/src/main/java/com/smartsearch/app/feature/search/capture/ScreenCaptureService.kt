@@ -494,18 +494,18 @@ class ScreenCaptureService : Service() {
      * @param rect 用户选区矩形（屏幕坐标），可为 null（后续通过 updateSelectionRect 设置）
      */
     private fun startCapture(projectionIntent: Intent, rect: Rect?) {
-        // 先销毁旧实例，释放资源（全局实例管理）
-        try {
-            if (isCapturing) {
-                Log.w(TAG, "录屏采集已在进行中，先销毁旧实例")
-                stopCaptureInternal()
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "销毁旧采集实例异常: ${e.message}", e)
-        }
-
         try {
             this.selectionRect = rect
+
+            // 先通过 ScreenCaptureManager 释放旧实例（全局单例管理）
+            try {
+                if (ScreenCaptureManager.isActive) {
+                    Log.w(TAG, "录屏采集已在进行中，先销毁旧实例")
+                    ScreenCaptureManager.releaseAll()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "销毁旧采集实例异常: ${e.message}", e)
+            }
 
             // 启动前台服务
             startForegroundNotification()
@@ -531,12 +531,8 @@ class ScreenCaptureService : Service() {
                 }
             }
 
-            // 创建 MediaProjection
-            mediaProjection = mediaProjectionManager?.getMediaProjection(
-                Activity.RESULT_OK,
-                projectionIntent
-            )
-
+            // 使用 ScreenCaptureManager 创建 MediaProjection（自动销毁旧实例）
+            mediaProjection = ScreenCaptureManager.createMediaProjection(this, projectionIntent)
             if (mediaProjection == null) {
                 Log.e(TAG, "无法获取 MediaProjection")
                 switchToAccessibilityMode()
@@ -544,46 +540,21 @@ class ScreenCaptureService : Service() {
                 return
             }
 
-            // 注册 MediaProjection 停止回调
-            mediaProjection?.registerCallback(object : MediaProjection.Callback() {
-                override fun onStop() {
-                    Log.w(TAG, "MediaProjection 已停止（权限被回收或页面拦截）")
-                    mainHandler.post {
-                        try {
-                            switchToAccessibilityMode()
-                        } catch (_: Exception) { }
-                        stopSelf()
-                    }
-                }
-            }, mainHandler)
-
-            // 创建 ImageReader（用于接收屏幕帧）
-            imageReader = ImageReader.newInstance(
-                screenWidth,
-                screenHeight,
-                PixelFormat.RGBA_8888,
-                2 // 缓冲队列大小
-            ).apply {
-                setOnImageAvailableListener({ reader ->
-                    try {
-                        onImageAvailable(reader)
-                    } catch (e: Exception) {
-                        Log.e(TAG, "ImageReader 回调异常: ${e.message}", e)
-                    }
-                }, backgroundHandler)
+            // 使用 ScreenCaptureManager 创建 VirtualDisplay + ImageReader（自动销毁旧实例）
+            imageReader = ScreenCaptureManager.createVirtualDisplay(
+                mediaProjection!!,
+                { reader -> onImageAvailable(reader) },
+                backgroundHandler!!
+            )
+            if (imageReader == null) {
+                Log.e(TAG, "无法创建 VirtualDisplay/ImageReader")
+                switchToAccessibilityMode()
+                stopSelf()
+                return
             }
 
-            // 创建 VirtualDisplay
-            virtualDisplay = mediaProjection?.createVirtualDisplay(
-                "ScreenCapture",
-                screenWidth,
-                screenHeight,
-                screenDensity,
-                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-                imageReader?.surface,
-                null,
-                backgroundHandler
-            )
+            // 同步本地引用
+            virtualDisplay = null // 由 ScreenCaptureManager 管理，本地不持有
 
             isCapturing = true
             blackFrameCount = 0
@@ -595,7 +566,7 @@ class ScreenCaptureService : Service() {
                 try { startForegroundNotification() } catch (_: Exception) { }
             }
             // 异常时释放资源
-            try { stopCaptureInternal() } catch (_: Exception) { }
+            try { ScreenCaptureManager.releaseAll() } catch (_: Exception) { }
             // 友好弹窗提示用户
             try {
                 FloatWindowManager.showAnswerWindow(
@@ -891,17 +862,13 @@ class ScreenCaptureService : Service() {
             // 清除录屏授权标记
             try { PermissionManager.clearScreenCaptureGranted(this) } catch (_: Exception) { }
 
-            // 停止 VirtualDisplay
-            try { virtualDisplay?.release() } catch (_: Exception) { }
-            virtualDisplay = null
+            // 使用 ScreenCaptureManager 释放 MediaProjection/VirtualDisplay/ImageReader 资源
+            try { ScreenCaptureManager.releaseAll() } catch (_: Exception) { }
 
-            // 关闭 ImageReader
-            try { imageReader?.close() } catch (_: Exception) { }
-            imageReader = null
-
-            // 停止 MediaProjection
-            try { mediaProjection?.stop() } catch (_: Exception) { }
+            // 清理本地引用
             mediaProjection = null
+            virtualDisplay = null
+            imageReader = null
 
             // 停止前台服务
             if (isForegroundStarted) {

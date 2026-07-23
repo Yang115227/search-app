@@ -120,62 +120,142 @@ object FloatWindowManager {
         )
     }
 
-    /** 选区持久化存储（SharedPreferences）- 按模式分键存储 */
+    /**
+     * 选区持久化存储（SharedPreferences）
+     * - 按模式分键存储（无障碍/录屏/扫描各自独立）
+     * - 横竖屏分开存储（orientation后缀）
+     * - 存取时自动做坐标换算（扣除/加上状态栏、导航栏高度）
+     * - 加载后自动做屏幕边界裁剪适配
+     */
     object SelectionPrefs {
-        private const val PREFS_NAME = "float_selection"
+        private const val PREFS_NAME = "float_selection_v2"
         private const val KEY_LEFT = "sel_left"
         private const val KEY_TOP = "sel_top"
         private const val KEY_RIGHT = "sel_right"
         private const val KEY_BOTTOM = "sel_bottom"
 
-        private fun getPrefsKey(mode: SearchMode): String = when (mode) {
+        private fun getModeKey(mode: SearchMode): String = when (mode) {
             SearchMode.ACCESSIBILITY -> "accessibility"
             SearchMode.SCREEN_CAPTURE -> "screen_capture"
             SearchMode.CAMERA -> "camera"
         }
 
-        fun save(context: Context, rect: Rect, mode: SearchMode? = null) {
+        /** 获取横竖屏后缀：横屏返回 "_land"，竖屏返回空字符串 */
+        private fun getOrientationSuffix(context: Context): String {
+            return try {
+                val orientation = context.resources.configuration.orientation
+                if (orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) "_land" else ""
+            } catch (_: Exception) { "" }
+        }
+
+        /**
+         * 保存选区（自动扣除状态栏/导航栏，转为应用可视区域坐标）。
+         * @param context 上下文（建议传 Activity，以便获取状态栏高度）
+         * @param rawRect 屏幕坐标中的选区矩形
+         * @param mode 搜题模式，null 则使用当前模式
+         */
+        fun save(context: Context, rawRect: Rect, mode: SearchMode? = null) {
             try {
-                val modeKey = getPrefsKey(mode ?: currentSearchMode)
+                val modeKey = getModeKey(mode ?: currentSearchMode)
+                val orientationSuffix = getOrientationSuffix(context)
+                // 扣除状态栏、导航栏高度，存储为应用可视区域坐标
+                val appRect = screenToAppRect(context, rawRect)
+                Log.d("SelectionPrefs", "save: mode=$modeKey$orientationSuffix appRect=$appRect raw=$rawRect")
                 context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                     .edit()
-                    .putInt("${modeKey}_$KEY_LEFT", rect.left)
-                    .putInt("${modeKey}_$KEY_TOP", rect.top)
-                    .putInt("${modeKey}_$KEY_RIGHT", rect.right)
-                    .putInt("${modeKey}_$KEY_BOTTOM", rect.bottom)
+                    .putInt("${modeKey}${orientationSuffix}_$KEY_LEFT", appRect.left)
+                    .putInt("${modeKey}${orientationSuffix}_$KEY_TOP", appRect.top)
+                    .putInt("${modeKey}${orientationSuffix}_$KEY_RIGHT", appRect.right)
+                    .putInt("${modeKey}${orientationSuffix}_$KEY_BOTTOM", appRect.bottom)
                     .apply()
             } catch (e: Exception) {
-                Log.e("FloatWindowManager", "保存选区失败: ${e.message}", e)
+                Log.e("SelectionPrefs", "保存选区失败: ${e.message}", e)
             }
         }
 
+        /**
+         * 加载选区（自动加上状态栏/导航栏，转为屏幕坐标，并做边界裁剪）。
+         * @param context 上下文
+         * @param mode 搜题模式，null 则使用当前模式
+         * @return 经过边界裁剪的屏幕坐标矩形，如果没有存储记录则返回 null
+         */
         fun load(context: Context, mode: SearchMode? = null): Rect? {
             try {
-                val modeKey = getPrefsKey(mode ?: currentSearchMode)
+                val modeKey = getModeKey(mode ?: currentSearchMode)
+                val orientationSuffix = getOrientationSuffix(context)
                 val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                val left = prefs.getInt("${modeKey}_$KEY_LEFT", -1)
-                val top = prefs.getInt("${modeKey}_$KEY_TOP", -1)
-                val right = prefs.getInt("${modeKey}_$KEY_RIGHT", -1)
-                val bottom = prefs.getInt("${modeKey}_$KEY_BOTTOM", -1)
-                if (left < 0 || top < 0 || right < 0 || bottom < 0) return null
-                return Rect(left, top, right, bottom)
+                val left = prefs.getInt("${modeKey}${orientationSuffix}_$KEY_LEFT", -1)
+                val top = prefs.getInt("${modeKey}${orientationSuffix}_$KEY_TOP", -1)
+                val right = prefs.getInt("${modeKey}${orientationSuffix}_$KEY_RIGHT", -1)
+                val bottom = prefs.getInt("${modeKey}${orientationSuffix}_$KEY_BOTTOM", -1)
+                if (left < 0 || top < 0 || right < 0 || bottom < 0) {
+                    // 当前方向无数据，尝试兼容旧版（无方向后缀）
+                    val leftFallback = prefs.getInt("${modeKey}_$KEY_LEFT", -1)
+                    val topFallback = prefs.getInt("${modeKey}_$KEY_TOP", -1)
+                    val rightFallback = prefs.getInt("${modeKey}_$KEY_RIGHT", -1)
+                    val bottomFallback = prefs.getInt("${modeKey}_$KEY_BOTTOM", -1)
+                    if (leftFallback < 0 || topFallback < 0 || rightFallback < 0 || bottomFallback < 0) return null
+                    // 将旧版存储的应用可视区域坐标转为屏幕坐标并裁剪
+                    val appRect = Rect(leftFallback, topFallback, rightFallback, bottomFallback)
+                    val clampedRect = clampToScreenBounds(context, appRect)
+                    Log.d("SelectionPrefs", "load(legacy): mode=$modeKey appRect=$appRect clamped=$clampedRect")
+                    return clampedRect
+                }
+                // 将应用可视区域坐标转为屏幕坐标并裁剪
+                val appRect = Rect(left, top, right, bottom)
+                val clampedRect = clampToScreenBounds(context, appRect)
+                Log.d("SelectionPrefs", "load: mode=$modeKey$orientationSuffix appRect=$appRect clamped=$clampedRect")
+                return clampedRect
             } catch (e: Exception) {
-                Log.e("FloatWindowManager", "加载选区失败: ${e.message}", e)
+                Log.e("SelectionPrefs", "加载选区失败: ${e.message}", e)
                 return null
             }
         }
 
+        /**
+         * 将应用可视区域坐标转为屏幕坐标，并裁剪到屏幕边界内。
+         */
+        private fun clampToScreenBounds(context: Context, appRect: Rect): Rect {
+            val statusBarHeight = getStatusBarHeight(context)
+            val navBarHeight = getNavigationBarHeight(context)
+            val screenW = context.resources.displayMetrics.widthPixels
+            val screenH = context.resources.displayMetrics.heightPixels
+            // 转为屏幕坐标
+            val screenRect = Rect(
+                appRect.left,
+                appRect.top + statusBarHeight,
+                appRect.right,
+                appRect.bottom + statusBarHeight
+            )
+            // 边界裁剪，确保最小尺寸
+            val minW = (screenW * 0.15f).toInt().coerceIn(80, 200)
+            val minH = (screenH * 0.10f).toInt().coerceIn(60, 150)
+            var left = screenRect.left.coerceIn(0, screenW - minW)
+            var top = screenRect.top.coerceIn(0, screenH - minH)
+            var right = screenRect.right.coerceIn(left + minW, screenW)
+            var bottom = screenRect.bottom.coerceIn(top + minH, screenH)
+            // 二次回拉
+            if (right > screenW) { val w = right - left; right = screenW; left = (right - w).coerceAtLeast(0) }
+            if (bottom > screenH) { val h = bottom - top; bottom = screenH; top = (bottom - h).coerceAtLeast(0) }
+            if (left < 0) { right -= left; left = 0 }
+            if (top < 0) { bottom -= top; top = 0 }
+            if (right - left < minW) { right = left + minW; if (right > screenW) { left = screenW - minW; right = screenW } }
+            if (bottom - top < minH) { bottom = top + minH; if (bottom > screenH) { top = screenH - minH; bottom = screenH } }
+            return Rect(left, top, right, bottom)
+        }
+
         fun clear(context: Context, mode: SearchMode? = null) {
             try {
-                val modeKey = getPrefsKey(mode ?: currentSearchMode)
+                val modeKey = getModeKey(mode ?: currentSearchMode)
+                val orientationSuffix = getOrientationSuffix(context)
                 val editor = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
-                editor.remove("${modeKey}_$KEY_LEFT")
-                editor.remove("${modeKey}_$KEY_TOP")
-                editor.remove("${modeKey}_$KEY_RIGHT")
-                editor.remove("${modeKey}_$KEY_BOTTOM")
+                editor.remove("${modeKey}${orientationSuffix}_$KEY_LEFT")
+                editor.remove("${modeKey}${orientationSuffix}_$KEY_TOP")
+                editor.remove("${modeKey}${orientationSuffix}_$KEY_RIGHT")
+                editor.remove("${modeKey}${orientationSuffix}_$KEY_BOTTOM")
                 editor.apply()
             } catch (e: Exception) {
-                Log.e("FloatWindowManager", "清除选区失败: ${e.message}", e)
+                Log.e("SelectionPrefs", "清除选区失败: ${e.message}", e)
             }
         }
     }
