@@ -52,6 +52,7 @@ fun AnswerScreen(
     onBack: () -> Unit,
     onFinish: () -> Unit
 ) {
+    Log.d("【PRACTICE_LOG】", "AnswerScreen 入口: subject=$subject mode=$mode")
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val gson = remember { Gson() }
@@ -71,21 +72,26 @@ fun AnswerScreen(
 
     // ── 加载题目 ──
     LaunchedEffect(subject, mode) {
+        Log.d("【PRACTICE_LOG】", "LaunchedEffect 开始: subject=$subject mode=$mode")
         // Bundle参数非空兜底：subject 和 mode 为空时使用默认值
         val safeSubject = subject.ifBlank { "" }
         val safeMode = mode.ifBlank { "SEQUENTIAL" }
         try {
+            Log.d("【PRACTICE_LOG】", "开始获取数据库实例")
             val db = QuizDatabase.getInstance(context)
+            Log.d("【PRACTICE_LOG】", "数据库实例获取成功")
             // 在 IO 线程执行数据库操作，返回结果
             val result = withContext(Dispatchers.IO) {
                 try {
+                    Log.d("【PRACTICE_LOG】", "IO线程: 开始查询练习会话")
                     // 检查是否有未完成的练习会话
                     val existingSession = try {
                         db.practiceSessionDao().getLatestIncompleteSession()
                     } catch (e: Exception) {
-                        Log.e("AnswerScreen", "查询练习会话异常: ${e.message}", e)
+                        Log.e("【PRACTICE_LOG】", "查询练习会话异常: ${e.message}", e)
                         null
                     }
+                    Log.d("【PRACTICE_LOG】", "IO线程: 查询会话完成: existingSession=${existingSession != null}")
 
                     if (existingSession != null &&
                         existingSession.subject == safeSubject &&
@@ -98,7 +104,7 @@ fun AnswerScreen(
                                 object : TypeToken<List<Long>>() {}.type
                             )
                         } catch (e: Exception) {
-                            Log.e("AnswerScreen", "解析题目ID列表异常: ${e.message}", e)
+                            Log.e("【PRACTICE_LOG】", "解析题目ID列表异常: ${e.message}", e)
                             emptyList()
                         }
                         val loadedQuestions = ids.mapNotNull { id -> db.questionDao().findById(id) }
@@ -108,7 +114,7 @@ fun AnswerScreen(
                                 object : TypeToken<Map<Long, Int>>() {}.type
                             ) ?: emptyMap()
                         } catch (e: Exception) {
-                            Log.e("AnswerScreen", "解析答案数据异常: ${e.message}", e)
+                            Log.e("【PRACTICE_LOG】", "解析答案数据异常: ${e.message}", e)
                             emptyMap()
                         }
                         val savedBookmarks: List<Long> = try {
@@ -117,7 +123,7 @@ fun AnswerScreen(
                                 object : TypeToken<List<Long>>() {}.type
                             ) ?: emptyList()
                         } catch (e: Exception) {
-                            Log.e("AnswerScreen", "解析收藏数据异常: ${e.message}", e)
+                            Log.e("【PRACTICE_LOG】", "解析收藏数据异常: ${e.message}", e)
                             emptyList()
                         }
 
@@ -135,11 +141,13 @@ fun AnswerScreen(
                         )
                     } else {
                         // 创建新会话
+                        Log.d("【PRACTICE_LOG】", "IO线程: 创建新会话, safeSubject=$safeSubject safeMode=$safeMode")
                         val allQuestions = if (safeSubject.isBlank()) {
                             db.questionDao().getAllQuestions()
                         } else {
                             db.questionDao().findBySubject(safeSubject)
                         }
+                        Log.d("【PRACTICE_LOG】", "IO线程: 查询题目完成, count=${allQuestions.size}")
                         // 随机排序空列表校验：空列表不调用 shuffled()
                         val orderedQuestions = if (allQuestions.isEmpty()) {
                             emptyList()
@@ -159,6 +167,7 @@ fun AnswerScreen(
                                 startTime = System.currentTimeMillis()
                             )
                             newSessionId = db.practiceSessionDao().insert(newSession)
+                            Log.d("【PRACTICE_LOG】", "IO线程: 新会话已创建, sessionId=$newSessionId")
                         }
                         LoadResult(
                             questions = orderedQuestions,
@@ -174,12 +183,14 @@ fun AnswerScreen(
                         )
                     }
                 } catch (e: Exception) {
-                    Log.e("AnswerScreen", "加载题目异常: ${e.message}", e)
+                    Log.e("【PRACTICE_LOG】", "加载题目异常: ${e.message}", e)
                     null
                 }
             }
+            Log.d("【PRACTICE_LOG】", "withContext 返回, result=${result != null}")
             // 状态修改必须在主线程
             result?.let { r ->
+                Log.d("【PRACTICE_LOG】", "主线程: 开始更新状态, questions.size=${r.questions.size}")
                 questions = r.questions
                 currentIndex = r.currentIndex
                 answers = r.answers
@@ -189,11 +200,13 @@ fun AnswerScreen(
                 sessionId = r.sessionId
                 startTime = r.startTime
                 submittedQuestions = r.submittedQuestions
+                Log.d("【PRACTICE_LOG】", "主线程: 状态更新完成, questions.size=${questions.size}")
             }
         } catch (e: Exception) {
-            Log.e("AnswerScreen", "获取数据库实例异常: ${e.message}", e)
+            Log.e("【PRACTICE_LOG】", "获取数据库实例异常: ${e.message}", e)
         }
         isLoading = false
+        Log.d("【PRACTICE_LOG】", "LaunchedEffect 结束, isLoading=false questions.size=${questions.size}")
     }
 
     // ── 保存进度辅助函数 ──
