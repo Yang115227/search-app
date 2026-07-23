@@ -22,6 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.smartsearch.app.data.local.QuizDatabase
+import com.smartsearch.app.data.parser.ExcelImporter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -114,6 +115,13 @@ fun QuestionBankManageScreen(
             // 清理已不存在的选中项
             val validSubjects = loadedItems.map { it.subject }.toSet()
             selectedSubjects = selectedSubjects.filter { it in validSubjects }.toSet()
+
+            // 清理之前导入时可能误导入的表头行脏数据
+            try {
+                ExcelImporter.cleanupHeaderRows(context)
+            } catch (e: Exception) {
+                Log.e("【DB_LOG】", "清理表头行脏数据异常: ${e.message}", e)
+            }
         } catch (e: Exception) {
             Log.e("【DB_LOG】", "加载题库数据异常: ${e.message}", e)
             dbInitFailed = true
@@ -391,14 +399,18 @@ fun QuestionBankManageScreen(
                 }
             }
         } else if (isLoading) {
-            // 加载中
+            // 加载中（使用Text替代CircularProgressIndicator避免某些设备上的组件兼容性闪退）
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding),
                 contentAlignment = Alignment.Center
             ) {
-                CircularProgressIndicator(color = Color(0xFF4CAF50))
+                Text(
+                    text = "加载中...",
+                    color = Color(0xFF4CAF50),
+                    fontSize = 16.sp
+                )
             }
         } else if (subjects.isEmpty()) {
             // 空状态

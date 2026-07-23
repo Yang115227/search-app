@@ -30,6 +30,7 @@ import com.smartsearch.app.data.local.entity.PracticeRecordEntity
 import com.smartsearch.app.data.local.entity.PracticeSessionEntity
 import com.smartsearch.app.data.local.entity.QuestionEntity
 import com.smartsearch.app.data.parser.AnswerCleaner
+import com.smartsearch.app.data.parser.ExcelImporter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -82,6 +83,13 @@ fun AnswerScreen(
             Log.d("【PRACTICE_LOG】", "开始获取数据库实例")
             val db = QuizDatabase.getInstance(context)
             Log.d("【PRACTICE_LOG】", "数据库实例获取成功")
+
+            // 清理之前导入时可能误导入的表头行脏数据
+            try {
+                ExcelImporter.cleanupHeaderRows(context)
+            } catch (e: Exception) {
+                Log.e("【PRACTICE_LOG】", "清理表头行脏数据异常: ${e.message}", e)
+            }
             // 在 IO 线程执行数据库操作，返回结果
             val result = withContext(Dispatchers.IO) {
                 try {

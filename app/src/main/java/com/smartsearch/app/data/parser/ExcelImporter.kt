@@ -91,7 +91,48 @@ object ExcelImporter {
         ) : ImportResult()
     }
 
+    /** 常见表头关键词列表（用于模糊匹配，当精确匹配失败时兜底检测） */
+    private val HEADER_KEYWORDS = listOf(
+        "题", "题目", "题干", "问题", "question",
+        "答", "答案", "正确", "answer",
+        "选", "选项", "options",
+        "解析", "解释", "explanation",
+        "科", "学科", "科目", "subject",
+        "序号", "编号", "id", "no"
+    )
+
+    /** 判断文本是否看起来像表头（基于关键词模糊匹配） */
+    private fun looksLikeHeader(text: String): Boolean {
+        val lower = text.trim().lowercase()
+        if (lower.length > 20) return false // 过长的文本不可能是表头
+        return HEADER_KEYWORDS.any { keyword ->
+            lower.contains(keyword) || keyword.contains(lower)
+        }
+    }
+
     // ==================== 公开 API ====================
+
+    /**
+     * 清理数据库中已知的表头行脏数据。
+     * 当之前的导入把 Excel 表头行误作为题目导入时，调用此方法删除。
+     */
+    suspend fun cleanupHeaderRows(context: Context) {
+        val db = QuizDatabase.getInstance(context)
+        val dao = db.questionDao()
+        withContext(Dispatchers.IO) {
+            val allQuestions = dao.getAllQuestions()
+            val headerQuestions = allQuestions.filter { q ->
+                q.question.isNotBlank() && q.question.length <= 15 &&
+                        KNOWN_HEADER_TEXTS.any { header ->
+                            q.question.trim().lowercase() == header
+                        }
+            }
+            if (headerQuestions.isNotEmpty()) {
+                Log.w(TAG, "清理 ${headerQuestions.size} 条表头行脏数据")
+                headerQuestions.forEach { dao.delete(it) }
+            }
+        }
+    }
 
     /**
      * 从 Uri 导入 Excel 题库。
@@ -192,8 +233,33 @@ object ExcelImporter {
                 }
             }
 
-            // 确定数据起始行（有表头从第 2 行开始，无表头从第 1 行开始）
-            val dataStartRow = if (columnMapping.isNotEmpty()) 1 else 0
+            // 确定数据起始行
+            // 有表头映射时从第 2 行（索引 1）开始，无表头映射时：
+            //   1. 如果第一行内容看起来像表头（短文本、含关键词），则跳过第一行
+            //   2. 否则从第 1 行（索引 0）开始
+            var dataStartRow: Int
+            if (columnMapping.isNotEmpty()) {
+                dataStartRow = 1
+            } else {
+                // 无表头映射时，启发式检测第一行是否像表头
+                val firstRow = sheet.getRow(0)
+                val firstRowLooksLikeHeader = firstRow?.let { row ->
+                    val nonEmptyCells = (0 until row.lastCellNum.coerceAtMost(10)).mapNotNull { idx ->
+                        val cell = row.getCell(idx)
+                        val text = getCellString(cell).trim()
+                        text.ifBlank { null }
+                    }
+                    // 第一行多数单元格短文本且含关键词 → 判定为表头
+                    nonEmptyCells.isNotEmpty() && nonEmptyCells.all { it.length <= 15 && looksLikeHeader(it) }
+                } ?: false
+
+                dataStartRow = if (firstRowLooksLikeHeader) {
+                    Log.w(TAG, "第一行内容看起来像表头，自动跳过（使用固定列序模式从第2行开始读取）")
+                    1
+                } else {
+                    0
+                }
+            }
 
             // 解析数据行
             val questions = mutableListOf<QuestionEntity>()
@@ -244,6 +310,11 @@ object ExcelImporter {
     // ==================== 表头解析 ====================
 
     /**
+     * 已知表头关键词列表（用于精确匹配）。
+     */
+    private val KNOWN_HEADER_TEXTS = COLUMN_ALIASES.keys.toSet()
+
+    /**
      * 解析表头行，返回 列索引 → 列类型 的映射。
      *
      * 策略：
@@ -251,7 +322,8 @@ object ExcelImporter {
      * 2. 将单元格文本与 [COLUMN_ALIASES] 匹配
      * 3. 返回匹配到的列索引映射
      *
-     * 如果表头行为空或无法匹配任何已知列名，返回空映射（走固定列序模式）。
+     * 如果没有找到"题干"列，但找到了其他列类型，仍返回部分映射（不强制要求"题干"列），
+     * 由调用方决定是否使用固定列序模式。
      */
     private fun parseHeader(headerRow: Row?): Map<Int, ColumnType> {
         if (headerRow == null) return emptyMap()
@@ -266,10 +338,15 @@ object ExcelImporter {
             }
         }
 
-        // 必须至少包含"题干"列，否则视为无效表头
-        if (!mapping.values.contains(ColumnType.QUESTION)) {
-            Log.w(TAG, "表头中未找到'题干'列，将使用固定列序模式")
+        // 至少找到一列可识别的表头才视为有效表头映射
+        if (mapping.isEmpty()) {
+            Log.w(TAG, "表头中未找到任何已知列名，将使用固定列序模式")
             return emptyMap()
+        }
+
+        // 如果没有找到"题干"列，但找到了其他列，记录警告但仍使用表头映射
+        if (!mapping.values.contains(ColumnType.QUESTION)) {
+            Log.w(TAG, "表头中未找到'题干'列，将根据已识别的列映射读取（缺少"题干"时题干字段将为空）")
         }
 
         return mapping
