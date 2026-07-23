@@ -374,8 +374,9 @@ object FloatWindowManager {
      *
      * @param context 上下文（建议传 Activity 或 Service）
      * @param onSearch 搜索回调，用户点击"开始搜题"后触发，进入连续搜题模式后每次轮询也会触发
+     * @param onOverlayAttached 选区悬浮窗已挂载到 WindowManager 的回调（onAttachedToWindow 触发）
      */
-    fun showSelectOverlay(context: Context, onSearch: (Rect) -> Unit) {
+    fun showSelectOverlay(context: Context, onSearch: (Rect) -> Unit, onOverlayAttached: (() -> Unit)? = null) {
         val ctx = context.applicationContext
         Log.d("【SELECT_LOG】", "showSelectOverlay 入口: mode=${currentSearchMode} state=${currentState} activeMode=${activeMode}")
 
@@ -445,6 +446,12 @@ object FloatWindowManager {
                 Log.d("【SELECT_LOG】", "showSelectOverlay onSaveRect: rect=(${rect.left},${rect.top},${rect.right},${rect.bottom}) mode=${currentSearchMode}")
                 lastSelectionRect = rect
                 SelectionPrefs.save(ctx, rect, currentSearchMode)
+            }
+
+            // 窗口挂载回调（onAttachedToWindow 触发）
+            onWindowAttached = {
+                Log.d("【SELECT_LOG】", "showSelectOverlay: onWindowAttached 触发, 执行 onOverlayAttached")
+                onOverlayAttached?.invoke()
             }
 
             // 第1步：先附加到窗口，确保屏幕尺寸已初始化
@@ -727,6 +734,78 @@ object FloatWindowManager {
                 captureService.triggerCaptureOnce()
             } else {
                 // 录屏服务未运行 → 提示用户
+                showAnswerWindow(
+                    context,
+                    answer = "录屏服务未运行",
+                    explanation = "录屏服务已停止，请重新授权录屏权限后重试。\n\n" +
+                            "切换路径：\n" +
+                            "悬浮球长按 → 切换录屏模式 → 授权录屏",
+                    onDismissed = {
+                        currentSearchMode = SearchMode.ACCESSIBILITY
+                    }
+                )
+            }
+        }
+    }
+
+    /**
+     * 以录屏模式显示选题框，并在选区挂载到 WindowManager 后通过回调通知调用方。
+     *
+     * 与 [showSelectOverlayForScreenCapture] 的区别：
+     * - 此方法用于录屏授权回调流程（先创建选区 → 等待挂载 → 再启动 Service）
+     * - 包含 1.5s 选区挂载超时检测
+     *
+     * 执行时序：
+     * 1. 创建录屏独立选区 Overlay，附加到 WindowManager
+     * 2. 等待 onAttachedToWindow 回调（1.5s 超时）
+     * 3. 挂载成功 → [onOverlayReady] 回调，调用方在此启动前台 Service + 发送投影 Intent
+     * 4. 挂载失败/超时 → [onOverlayFailed] 回调，调用方弹窗提示
+     *
+     * @param context 上下文
+     * @param onOverlayReady 选区已挂载到 WindowManager 的回调（调用方在此启动前台 Service）
+     * @param onOverlayFailed 选区挂载失败/超时的回调，参数为错误描述
+     */
+    fun showSelectOverlayForScreenCaptureWithAttach(
+        context: Context,
+        onOverlayReady: () -> Unit,
+        onOverlayFailed: (String) -> Unit
+    ) {
+        // 状态机防并发
+        if (isTransitioning) {
+            Log.d("【SELECT_LOG】", "showSelectOverlayForScreenCaptureWithAttach: 正在过渡中, 跳过")
+            onOverlayFailed("正在过渡中，请稍后重试")
+            return
+        }
+
+        // 模式切换检测
+        if (activeMode != null && activeMode != SearchMode.SCREEN_CAPTURE) {
+            Log.d("【SELECT_LOG】", "showSelectOverlayForScreenCaptureWithAttach: 检测到模式切换(${activeMode}→SCREEN_CAPTURE), 强制销毁旧选区")
+            forceDestroyCurrentOverlay()
+        }
+
+        isTransitioning = true
+        currentSearchMode = SearchMode.SCREEN_CAPTURE
+
+        // 1.5s 选区挂载超时检测
+        val attachTimeout = Runnable {
+            Log.e("【SELECT_LOG】", "showSelectOverlayForScreenCaptureWithAttach: 选区挂载超时(1.5s)")
+            forceDestroyCurrentOverlay()
+            isTransitioning = false
+            onOverlayFailed("选区悬浮窗创建失败，请检查悬浮窗权限是否开启")
+        }
+        Handler(Looper.getMainLooper()).postDelayed(attachTimeout, 1500)
+
+        showSelectOverlay(context, onOverlayAttached = {
+            Handler(Looper.getMainLooper()).removeCallbacks(attachTimeout)
+            Log.d("【SELECT_LOG】", "showSelectOverlayForScreenCaptureWithAttach: 选区已挂载到WindowManager, 通知调用方启动Service")
+            onOverlayReady()
+        }) { rect ->
+            // 用户点击"开始搜题" → 选区确认
+            val captureService = ScreenCaptureService.getInstance()
+            if (captureService != null) {
+                captureService.updateSelectionRect(rect)
+                captureService.triggerCaptureOnce()
+            } else {
                 showAnswerWindow(
                     context,
                     answer = "录屏服务未运行",

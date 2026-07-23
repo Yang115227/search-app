@@ -95,6 +95,12 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
      */
     var onAdjustmentComplete: ((Rect) -> Unit)? = null
 
+    /** 窗口已附加到 WindowManager 的回调（onAttachedToWindow 触发） */
+    var onWindowAttached: (() -> Unit)? = null
+
+    /** 窗口已从 WindowManager 分离的回调（onDetachedFromWindow 触发） */
+    var onWindowDetached: (() -> Unit)? = null
+
     // ==================== 窗口管理 ====================
 
     private var windowManager: WindowManager =
@@ -680,11 +686,13 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
         super.onAttachedToWindow()
         attachedCallbackReceived = true
         Log.d("【SELECT_LOG】", "onAttachedToWindow: 视图已附加到窗口, selectionRect=(${selectionRect.left.toInt()},${selectionRect.top.toInt()},${selectionRect.right.toInt()},${selectionRect.bottom.toInt()})")
+        onWindowAttached?.invoke()
     }
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
         Log.w("【SELECT_LOG】", "onDetachedFromWindow: 视图已从窗口分离 (可能被系统拒绝)")
+        onWindowDetached?.invoke()
     }
 
     /**

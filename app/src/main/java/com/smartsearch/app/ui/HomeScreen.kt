@@ -116,34 +116,41 @@ class HomeActivity : ComponentActivity() {
     /** 录屏初始化超时 Runnable（用于取消） */
     private var captureInitTimeout: Runnable? = null
 
-    /** 录屏就绪广播接收器（接收 Service 初始化完成通知） */
+    /** 录屏授权成功后待发送的 MediaProjection Intent（先创选区，再启 Service 时使用） */
+    private var pendingProjectionIntent: Intent? = null
+
+    /** 录屏服务是否已就绪（收到 ACTION_CAPTURE_READY 广播后置 true） */
+    @Volatile
+    private var captureServiceReady = false
+
+    /** 录屏广播 3s 超时是否已触发 */
+    @Volatile
+    private var captureReadyTimedOut = false
+
+    /** 录屏就绪广播接收器（接收 Service 初始化完成通知，不再负责创建选区） */
     private val captureReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
                 ScreenCaptureService.ACTION_CAPTURE_READY -> {
-                    // 取消超时计时器
+                    // 取消 3s 超时计时器
                     captureInitTimeout?.let {
                         Handler(Looper.getMainLooper()).removeCallbacks(it)
                     }
                     captureInitTimeout = null
 
-                    // 主线程执行 showSelectOverlay
-                    Handler(Looper.getMainLooper()).post {
-                        try {
-                            Log.d("【SCREEN_RECORD_LOG】", "收到CAPTURE_READY广播，准备调用showSelectOverlay")
-                            FloatWindowManager.showSelectOverlayForScreenCapture(this@HomeActivity)
-                            Toast.makeText(this@HomeActivity, "录屏模式已启动，请框选题目区域", Toast.LENGTH_SHORT).show()
-                            Log.d("【SCREEN_RECORD_LOG】", "录屏搜题启动全流程完成")
-                        } catch (e: Exception) {
-                            Log.e("【SCREEN_RECORD_LOG】", "showSelectOverlay 异常: ${e.message}", e)
-                            Toast.makeText(this@HomeActivity, "启动录屏搜题失败，已切换到无障碍模式", Toast.LENGTH_LONG).show()
-                            try { startAccessibilitySearch() } catch (_: Exception) { }
-                        }
+                    if (captureReadyTimedOut) {
+                        Log.w("【SCREEN_RECORD_LOG】", "收到CAPTURE_READY但超时已触发，忽略")
+                        return
                     }
+
+                    captureServiceReady = true
+                    Log.d("【SCREEN_RECORD_LOG】", "收到CAPTURE_READY广播，录屏服务已就绪")
+                    Toast.makeText(this@HomeActivity, "录屏模式已启动，请框选题目区域", Toast.LENGTH_SHORT).show()
+                    Log.d("【SCREEN_RECORD_LOG】", "录屏搜题启动全流程完成")
                 }
                 ScreenCaptureService.ACTION_CAPTURE_FAILED -> {
                     val errorMsg = intent.getStringExtra(ScreenCaptureService.EXTRA_ERROR_MESSAGE) ?: "未知错误"
-                    // 取消超时计时器
+                    // 取消 3s 超时计时器
                     captureInitTimeout?.let {
                         Handler(Looper.getMainLooper()).removeCallbacks(it)
                     }
@@ -162,48 +169,53 @@ class HomeActivity : ComponentActivity() {
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         screenCaptureTimedOut = false // 收到回调，取消超时标记
-        Log.d("【SCREEN_RECORD_LOG】", "screenCaptureLauncher 回调: resultCode=${result.resultCode} (RESULT_OK=${Activity.RESULT_OK}) data=${result.data != null}")
+        Log.d("【SCREEN_RECORD_LOG】", "screenCaptureLauncher 回调: resultCode=${result.resultCode} (RESULT_OK=${Activity.RESULT_OK})")
         // 严格判断 resultCode：必须等于 RESULT_OK
         if (result.resultCode == Activity.RESULT_OK && result.data != null) {
             try {
-                Log.d("【SCREEN_RECORD_LOG】", "录屏授权成功(resultCode=RESULT_OK), 开始启动前台服务+初始化MediaProjection")
-                // 第1步：启动前台服务（通知栏显示"录屏搜题运行中"）
-                ScreenCaptureService.startForegroundOnly(this)
-                Log.d("【SCREEN_RECORD_LOG】", "前台服务已启动，开始发送投影Intent")
+                Log.d("【SCREEN_RECORD_LOG】", "录屏授权成功, 保存投影Intent, 准备创建选区Overlay")
 
-                // ── 第2步：将授权Intent发送给录屏服务，创建MediaProjection ──
-                // Service初始化完成后通过本地广播 ACTION_CAPTURE_READY 通知主程序，
-                // 不再使用同步阻塞回调，避免主线程卡死。
-                ScreenCaptureService.setProjection(
+                // 保存投影 Intent，供后续 onOverlayReady 时启动 Service 使用
+                pendingProjectionIntent = result.data
+                captureServiceReady = false
+                captureReadyTimedOut = false
+
+                // === 执行新时序：先创建选区 → 等待 onAttachedToWindow → 再启动 Service ===
+                FloatWindowManager.showSelectOverlayForScreenCaptureWithAttach(
                     this,
-                    result.data!!,
-                    null // 选区由后续选题框回调传入
+                    onOverlayReady = {
+                        // 选区已挂载到 WindowManager → 启动前台 Service + 发送投影 Intent
+                        Log.d("【SCREEN_RECORD_LOG】", "选区已挂载到WindowManager, 启动前台Service并发送投影Intent")
+                        ScreenCaptureService.startForegroundOnly(this@HomeActivity)
+                        ScreenCaptureService.setProjection(
+                            this@HomeActivity,
+                            pendingProjectionIntent!!,
+                            null // 选区由后续选题框回调传入
+                        )
+                        // 3s 广播超时兜底
+                        val timeoutRunnable = Runnable {
+                            Log.e("【SCREEN_RECORD_LOG】", "录屏服务初始化超时(3s)")
+                            captureReadyTimedOut = true
+                            Toast.makeText(this@HomeActivity, "录屏启动超时，请重试", Toast.LENGTH_LONG).show()
+                            try { startAccessibilitySearch() } catch (_: Exception) { }
+                        }
+                        captureInitTimeout = timeoutRunnable
+                        Handler(Looper.getMainLooper()).postDelayed(timeoutRunnable, 3000)
+                    },
+                    onOverlayFailed = { errorMsg ->
+                        Log.e("【SCREEN_RECORD_LOG】", "选区创建失败: $errorMsg")
+                        Toast.makeText(this@HomeActivity, errorMsg, Toast.LENGTH_LONG).show()
+                        try { startAccessibilitySearch() } catch (_: Exception) { }
+                    }
                 )
-                Log.d("【SCREEN_RECORD_LOG】", "setProjection Intent已发送，等待Service初始化回调")
-
-                // 第4步：3秒超时保护
-                // 如果 Service 初始化未在 3 秒内完成回调，打印超时日志并释放资源
-                val timeoutRunnable = Runnable {
-                    Log.e("【SCREEN_RECORD_LOG】", "录屏服务初始化超时(3s)，释放资源并降级")
-                    // 先清理屏幕录制资源
-                    try {
-                        ScreenCaptureService.getInstance()?.stopCapture()
-                    } catch (_: Exception) { }
-                    Toast.makeText(this, "录屏启动超时，请重试", Toast.LENGTH_LONG).show()
-                    try { startAccessibilitySearch() } catch (_: Exception) { }
-                }
-                captureInitTimeout = timeoutRunnable
-                Handler(Looper.getMainLooper()).postDelayed(timeoutRunnable, 3000)
             } catch (e: Exception) {
-                Log.e("【SCREEN_RECORD_LOG】", "启动录屏服务异常: ${e.message}", e)
+                Log.e("【SCREEN_RECORD_LOG】", "启动录屏搜题异常: ${e.message}", e)
                 Toast.makeText(this, "启动录屏失败，已切换到无障碍模式", Toast.LENGTH_LONG).show()
-                // 降级到无障碍模式
                 try { startAccessibilitySearch() } catch (_: Exception) { }
             }
         } else {
-            // 用户拒绝或取消 → 无需停止服务（服务尚未启动），弹窗提示
-            Log.w("【SCREEN_RECORD_LOG】", "录屏授权被拒绝或取消, resultCode=${result.resultCode}, 跳过服务启动")
-            // 用户拒绝授权，弹窗提示而非静默处理
+            // 用户拒绝或取消
+            Log.w("【SCREEN_RECORD_LOG】", "录屏授权被拒绝或取消, resultCode=${result.resultCode}")
             Toast.makeText(this, "录屏权限未授权，无法使用录屏搜题", Toast.LENGTH_LONG).show()
         }
     }
@@ -491,9 +503,20 @@ class HomeActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        // 取消待处理的超时任务
+        captureInitTimeout?.let {
+            Handler(Looper.getMainLooper()).removeCallbacks(it)
+        }
+        captureInitTimeout = null
+        // 注销广播接收器
         try {
             unregisterReceiver(captureReceiver)
         } catch (_: Exception) { }
+        // 清理引用
+        pendingProjectionIntent = null
+        captureServiceReady = false
+        captureReadyTimedOut = false
+        Log.d("【SCREEN_RECORD_LOG】", "onDestroy: 已清理所有录屏资源")
     }
 
     // ==================== 日志导出 ====================

@@ -298,13 +298,12 @@ class ScreenCaptureService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // 首行立即调用 startForeground()，满足 Android 前台服务 5s 限制
+        if (!isForegroundStarted) {
+            startForegroundNotification()
+        }
         Log.d("【SCREEN_RECORD_LOG】", "onStartCommand: action=${intent?.action ?: "null"} flags=$flags startId=$startId")
         try {
-            // 任何情况下都确保前台通知已启动（防止系统判定"未在时限内启动前台服务"）
-            if (!isForegroundStarted) {
-                Log.d("【SCREEN_RECORD_LOG】", "onStartCommand: 启动前台通知")
-                startForegroundNotification()
-            }
 
             if (intent == null) {
                 // 服务被系统重建但无 Intent → 尝试恢复
