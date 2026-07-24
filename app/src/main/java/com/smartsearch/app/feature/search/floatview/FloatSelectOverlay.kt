@@ -4,8 +4,6 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
-import android.graphics.PorterDuff
-import android.graphics.PorterDuffXfermode
 import android.graphics.Rect
 import android.graphics.RectF
 import android.os.Build
@@ -20,18 +18,17 @@ import android.view.WindowManager
 import com.smartsearch.app.core.utils.RectUtil
 
 /**
- * 选题框悬浮窗 —— 全屏半透明遮罩 + 中间透明可拖动选区。
+ * 选题框悬浮窗 —— 纯透明悬浮窗 + 中间可选区域。
  *
  * # 视觉设计
- * - 全屏半透明黑色遮罩（alpha=0x80），中间矩形区域完全透明可透视底层页面
- * - 选区右上角绘制白色圆形 X 关闭按钮，半径 22dp
- * - 选区右下角绘制 L 形缩放控制点，边长 36dp
- * - 选区边框白色虚线，宽度 2dp
+ * - 外层 View 完全透明，无背景，不渲染遮罩
+ * - 只渲染用户选区框（白色边框 + 四角高亮 + 关闭按钮 + 缩放控制点 + 确认按钮）
+ * - 窗口尺寸 WRAP_CONTENT，仅包裹选区 + 按钮区域
  *
  * # 触摸逻辑
  * | 触摸位置               | 行为                              |
  * |-----------------------|-----------------------------------|
- * | 遮罩区域（选区外）      | 点击关闭（取消选题）                |
+ * | 选区关闭按钮           | 点击关闭（取消选题）                |
  * | 选区内（非按钮区）      | 拖动整体选区                      |
  * | X 关闭按钮             | 点击关闭（取消选题）                |
  * | 右下角缩放控制点        | 拖动改变选区大小                   |
@@ -39,7 +36,7 @@ import com.smartsearch.app.core.utils.RectUtil
  * # 窗口属性
  * - WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE：不拦截底层页面触控事件
  * - TYPE_APPLICATION_OVERLAY：Android 8+ 标准悬浮窗类型
- * - 全屏布局，选区坐标直接映射到屏幕坐标系
+ * - WRAP_CONTENT 尺寸，PixelFormat.TRANSLUCENT
  *
  * # 兼容性
  * Android 10 (API 29) ~ Android 14 (API 34)，Canvas 绘制，无第三方依赖。
@@ -107,13 +104,16 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
         context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
     private var isAttached = false
 
+    /**
+     * 保存窗口 LayoutParams，拖拽/缩放手势结束后更新窗口位置。
+     * 在 attachToWindow 中初始化，在 updateWindowPosition 中更新 x/y。
+     */
+    private var windowParams: WindowManager.LayoutParams? = null
+
     // ==================== 尺寸常量（dp 转 px） ====================
 
     private val density = context.resources.displayMetrics.density
     private val dp: Float.(Float) -> Float = { value -> value * density }
-
-    /** 遮罩颜色：半透明黑 */
-    private val maskColor = 0x80000000.toInt()
 
     /** 选区边框颜色：白色 */
     private val borderColor = Color.WHITE
@@ -190,6 +190,10 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
         // 强制刷新视图：invalidate 重绘 Canvas，requestLayout 触发父布局重新测量
         invalidate()
         requestLayout()
+        // 窗口已挂载时更新窗口位置
+        if (isAttached) {
+            updateWindowPosition()
+        }
         Log.d("【SELECT_LOG】", "setSelectionRect 完成: invalidate+requestLayout 已调用")
     }
 
@@ -235,32 +239,11 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
 
     // ==================== 画笔 ====================
 
-    /** 遮罩画笔（半透明黑） */
-    private val maskPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = maskColor
-        style = Paint.Style.FILL
-    }
-
-    /** 选区透明镂空画笔（DST_OUT 模式，用于在遮罩上挖出选区） */
-    private val clearPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        // DST_OUT = Dest * (1 - SrcAlpha)，在已绘制的遮罩上挖出选区
-        // 替代 API 29+ 已弃用的 CLEAR 模式，兼容 API 36 硬件加速 Canvas
-        xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_OUT)
-        style = Paint.Style.FILL
-    }
-
     /** 选区边框画笔（白色实线） */
     private val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = borderColor
         style = Paint.Style.STROKE
         strokeWidth = borderWidth
-    }
-
-    /** 调试用红色边框画笔（半透明红色，用于肉眼确认控件渲染区域） */
-    private val debugBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.argb(128, 255, 0, 0)
-        style = Paint.Style.STROKE
-        strokeWidth = 6f.dp(6f)
     }
 
     /** 选区四角高亮短线画笔 */
@@ -352,12 +335,19 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
         RESIZE
     }
 
+    // ==================== 窗口位置偏移（屏幕坐标 → 视图坐标） ====================
+
+    /** 窗口在屏幕上的 X 偏移（视图原点 = 屏幕 selectionRect.left） */
+    private var windowOffsetX = 0
+    /** 窗口在屏幕上的 Y 偏移（视图原点 = 屏幕 selectionRect.top） */
+    private var windowOffsetY = 0
+
     // ==================== 屏幕尺寸缓存 ====================
 
-    /** 屏幕宽度缓存（internal 供 FloatWindowManager 日志访问） */
+    /** 屏幕宽度缓存 */
     var screenWidth = 0
         private set
-    /** 屏幕高度缓存（internal 供 FloatWindowManager 日志访问） */
+    /** 屏幕高度缓存 */
     var screenHeight = 0
         private set
 
@@ -375,48 +365,75 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
         selectionRect.set(left, top, left + selW, top + selH)
     }
 
+    /**
+     * 计算视图的测量尺寸（基于选区 + 控制按钮区域）。
+     * 视图原点 = 选区左上角，所以视图尺寸 = 选区宽/高 + 四周按钮/控制点间距。
+     */
+    private fun calcViewExtent(): Pair<Int, Int> {
+        val extraLeft = (closeButtonRadius * 0.3f).toInt()
+        val extraTop = (closeButtonRadius * 0.3f + closeButtonRadius + 4f.dp()).toInt()
+        val extraRight = (resizeHandleSize + 4f.dp()).toInt()
+        val extraBottom = (confirmButtonMargin + confirmButtonHeight + 20f.dp()).toInt()
+        val w = selectionRect.width().toInt() + extraLeft + extraRight
+        val h = selectionRect.height().toInt() + extraTop + extraBottom
+        return Pair(w, h)
+    }
+
+    // ==================== 视图测量（WRAP_CONTENT） ====================
+
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        val (w, h) = calcViewExtent()
+        setMeasuredDimension(w, h)
+    }
+
+    // ==================== 坐标转换 ====================
+
+    /** 将视图坐标转换为屏幕坐标 X */
+    private fun toScreenX(viewX: Float) = viewX + windowOffsetX
+    /** 将视图坐标转换为屏幕坐标 Y */
+    private fun toScreenY(viewY: Float) = viewY + windowOffsetY
+    /** 获取视图坐标系下的选区矩形（视图原点 = 选区左上角） */
+    private val viewRect: RectF
+        get() = RectF(0f, 0f, selectionRect.width(), selectionRect.height())
+
     // ==================== Canvas 绘制 ====================
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        Log.d("【SELECT_LOG】", "onDraw 绘制: selectionRect=(${selectionRect.left.toInt()},${selectionRect.top.toInt()},${selectionRect.right.toInt()},${selectionRect.bottom.toInt()}) width=${width} height=${height}")
+        Log.d("【SELECT_LOG】", "onDraw 绘制: viewRect=(${viewRect.left.toInt()},${viewRect.top.toInt()},${viewRect.right.toInt()},${viewRect.bottom.toInt()}) width=${width} height=${height}")
 
         if (selectionRect.isEmpty || selectionRect.width() <= 0 || selectionRect.height() <= 0) {
             Log.d("【SELECT_LOG】", "onDraw: 选区为空, 跳过绘制")
             return
         }
 
-        // ── 第 1 层：绘制半透明遮罩 + 镂空选区 ──
-        // 使用 DST_OUT 模式镂空选区（替代已弃用的 CLEAR），兼容 API 36 硬件加速 Canvas
-        // 无需 saveLayer，直接在 Canvas 上绘制即可
-        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), maskPaint)
-        canvas.drawRect(selectionRect, clearPaint)
+        val vr = viewRect
 
-        // ── 第 2 层：选区边框 ──
-        canvas.drawRect(selectionRect, borderPaint)
+        // ── 第 1 层：选区边框 ──
+        canvas.drawRect(vr, borderPaint)
 
-        // ── 第 2b 层：调试红色边框（肉眼确认控件是否渲染） ──
-        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), debugBorderPaint)
+        // ── 第 2 层：四角高亮短线 ──
+        drawCornerHighlights(canvas, vr)
 
-        // ── 第 3 层：四角高亮短线 ──
-        drawCornerHighlights(canvas)
+        // ── 第 3 层：右上角 X 关闭按钮 ──
+        drawCloseButton(canvas, vr)
 
-        // ── 第 4 层：右上角 X 关闭按钮 ──
-        drawCloseButton(canvas)
+        // ── 第 4 层：右下角缩放控制点 ──
+        drawResizeHandle(canvas, vr)
 
-        // ── 第 5 层：右下角缩放控制点 ──
-        drawResizeHandle(canvas)
+        // ── 第 5 层：确认选区按钮 ──
+        drawConfirmButton(canvas, vr)
 
-        // ── 第 6 层：确认选区按钮 ──
-        drawConfirmButton(canvas)
+        // 连续搜题标签已在 drawConfirmButton 中绘制
     }
 
     /**
      * 绘制选区四角的高亮短线（相机取景框风格）。
+     * @param vr 视图坐标系下的选区矩形
      */
-    private fun drawCornerHighlights(canvas: Canvas) {
+    private fun drawCornerHighlights(canvas: Canvas, vr: RectF) {
         val cornerLen = 16f.dp(16f)
-        val r = selectionRect
+        val r = vr
 
         // 左上角 ┐
         canvas.drawLine(r.left, r.top, r.left + cornerLen, r.top, cornerPaint)
@@ -438,10 +455,11 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
     /**
      * 绘制右上角 X 关闭按钮。
      * 圆心位于选区右上角外侧右移半个半径，上移半个半径。
+     * @param vr 视图坐标系下的选区矩形
      */
-    private fun drawCloseButton(canvas: Canvas) {
-        val cx = selectionRect.right + closeButtonRadius * 0.3f
-        val cy = selectionRect.top - closeButtonRadius * 0.3f
+    private fun drawCloseButton(canvas: Canvas, vr: RectF) {
+        val cx = vr.right + closeButtonRadius * 0.3f
+        val cy = vr.top - closeButtonRadius * 0.3f
 
         // 背景圆
         canvas.drawCircle(cx, cy, closeButtonRadius, closeBgPaint)
@@ -454,9 +472,10 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
 
     /**
      * 绘制右下角 L 形缩放控制点。
+     * @param vr 视图坐标系下的选区矩形
      */
-    private fun drawResizeHandle(canvas: Canvas) {
-        val r = selectionRect
+    private fun drawResizeHandle(canvas: Canvas, vr: RectF) {
+        val r = vr
         val x = r.right - 4f.dp(4f)
         val y = r.bottom - 4f.dp(4f)
         val len = resizeHandleLineLen
@@ -475,9 +494,10 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
      * 按钮位于选区底部下方 [confirmButtonMargin] 像素处，水平居中。
      * - 普通模式：显示"开始搜题"
      * - 连续搜题模式：显示"搜题中..."
+     * @param vr 视图坐标系下的选区矩形
      */
-    private fun drawConfirmButton(canvas: Canvas) {
-        val r = selectionRect
+    private fun drawConfirmButton(canvas: Canvas, vr: RectF) {
+        val r = vr
         val btnCenterX = r.centerX()
         val btnTop = r.bottom + confirmButtonMargin
         val btnLeft = btnCenterX - confirmButtonWidth / 2f
@@ -503,6 +523,10 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
 
     // ==================== 触摸事件处理 ====================
 
+    /** 获取视图坐标系下的选区矩形 */
+    private val touchViewRect: RectF
+        get() = RectF(0f, 0f, selectionRect.width(), selectionRect.height())
+
     override fun onTouchEvent(event: MotionEvent): Boolean {
         val x = event.x
         val y = event.y
@@ -518,6 +542,7 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
 
     /**
      * 手指按下：判断触摸位置，决定进入 DRAG / RESIZE / 点击确认/关闭 模式。
+     * 触摸坐标 (x,y) 为视图坐标系，与 viewRect 同坐标系。
      */
     private fun handleTouchDown(x: Float, y: Float) {
         touchStartX = x
@@ -525,8 +550,10 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
         lastValidX = x
         lastValidY = y
 
+        val vr = touchViewRect
+
         // 优先级 1：点击 X 关闭按钮
-        if (RectUtil.hitCloseButton(x, y, selectionRect, closeButtonRadius * 2f, 0f, touchSlop)) {
+        if (RectUtil.hitCloseButton(x, y, vr, closeButtonRadius * 2f, 0f, touchSlop)) {
             // 点击关闭 → 取消选题
             onDismiss?.invoke()
             touchMode = TouchMode.NONE
@@ -547,7 +574,7 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
         }
 
         // 优先级 3：点击缩放控制点
-        if (RectUtil.hitResizeHandle(x, y, selectionRect, resizeHandleSize, touchSlop)) {
+        if (RectUtil.hitResizeHandle(x, y, vr, resizeHandleSize, touchSlop)) {
             touchMode = TouchMode.RESIZE
             resizeStartRect.set(selectionRect)
             // 缩放锚点为左上角（固定不动）
@@ -557,13 +584,13 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
         }
 
         // 优先级 4：点击选区内部 → 拖动
-        if (selectionRect.contains(x, y)) {
+        if (vr.contains(x, y)) {
             touchMode = TouchMode.DRAG
             dragStartRect.set(selectionRect)
             return
         }
 
-        // 优先级 5：点击遮罩区域（选区外）→ 取消选题
+        // 优先级 5：点击选区外 → 取消选题
         onDismiss?.invoke()
         touchMode = TouchMode.NONE
     }
@@ -619,6 +646,8 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
 
                 selectionRect.set(resizeAnchorX, resizeAnchorY, newRight, newBottom)
                 invalidate()
+                // 选区尺寸变化后请求重新测量视图
+                requestLayout()
                 Log.d("【SELECT_LOG】", "handleTouchMove RESIZE: rect=(${selectionRect.left.toInt()},${selectionRect.top.toInt()},${selectionRect.right.toInt()},${selectionRect.bottom.toInt()})")
             }
 
@@ -642,6 +671,10 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
             )
             Log.d("【SELECT_LOG】", "handleTouchUp: touchMode=$touchMode rect=(${rect.left},${rect.top},${rect.right},${rect.bottom}) isAdjustmentMode=$isAdjustmentMode isContinuousMode=$isContinuousMode")
 
+            // 拖拽/缩放结束后，更新窗口位置以匹配选区新位置
+            updateWindowPosition()
+            Log.d("【SELECT_LOG】", "handleTouchUp: 窗口位置已更新")
+
             // 保存最新选区到持久化存储（记忆选区位置）
             onSaveRect?.invoke(rect)
             Log.d("【SELECT_LOG】", "handleTouchUp: 已调用 onSaveRect 保存选区")
@@ -660,10 +693,10 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
     }
 
     /**
-     * 判断触摸点是否点击了确认选区按钮。
+     * 判断触摸点是否点击了确认选区按钮（视图坐标系）。
      */
     private fun hitConfirmButton(x: Float, y: Float): Boolean {
-        val r = selectionRect
+        val r = touchViewRect
         val btnCenterX = r.centerX()
         val btnTop = r.bottom + confirmButtonMargin
         val btnLeft = btnCenterX - confirmButtonWidth / 2f - touchSlop
@@ -698,13 +731,8 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
     /**
      * 通过 WindowManager 将悬浮窗附加到屏幕上。
      *
-     * 兼容性说明：
-     * - Android 14+ (API 34+) 对 TYPE_APPLICATION_OVERLAY 有额外限制，
-     *   addView 可能同步成功但系统异步拒绝窗口创建（onAttachedToWindow 不会触发）。
-     * - 移除 FLAG_LAYOUT_IN_SCREEN：该标志位与 API 36 的叠加窗口限制可能冲突，
-     *   导致 ViewRootImpl 无法完成初始化。
-     * - addView 后添加延迟检查：1 秒后验证 onAttachedToWindow 是否已触发，
-     *   若未触发则尝试重建窗口。
+     * 窗口尺寸 WRAP_CONTENT，仅包裹选区 + 控制按钮。
+     * 窗口位置 = 选区左上角，允许用户拖动窗口整体移动。
      */
     fun attachToWindow() {
         if (isAttached) return
@@ -721,8 +749,12 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
         // 标记：在 onAttachedToWindow 中设为 true，用于延迟检查
         attachedCallbackReceived = false
 
+        // 计算窗口偏移（视图原点 = 选区左上角）
+        windowOffsetX = selectionRect.left.toInt()
+        windowOffsetY = selectionRect.top.toInt()
+
         val params = WindowManager.LayoutParams().apply {
-            // Android 8.0+ (API 26+) 统一使用 TYPE_APPLICATION_OVERLAY
+            windowParams = this
             type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
             } else {
@@ -731,16 +763,15 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
             }
 
             // 关键 Flag：不拦截底层页面触控，不获取焦点
-            // 注意：API 34+ 移除 FLAG_LAYOUT_IN_SCREEN，避免与叠加窗口限制冲突
             flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                     WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
 
-            // 全屏布局
-            width = WindowManager.LayoutParams.MATCH_PARENT
-            height = WindowManager.LayoutParams.MATCH_PARENT
+            // WRAP_CONTENT：仅包裹选区 + 控制按钮，不铺满全屏
+            width = WindowManager.LayoutParams.WRAP_CONTENT
+            height = WindowManager.LayoutParams.WRAP_CONTENT
             gravity = Gravity.TOP or Gravity.START
-            x = 0
-            y = 0
+            x = windowOffsetX
+            y = windowOffsetY
 
             format = android.graphics.PixelFormat.TRANSLUCENT
         }
@@ -748,21 +779,16 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
         try {
             windowManager.addView(this, params)
             isAttached = true
-            Log.d("【SELECT_LOG】", "attachToWindow: addView 成功, screen=${screenWidth}x${screenHeight}, windowType=${params.type} (TYPE_APPLICATION_OVERLAY=${WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY})")
-            // addView 后立即触发重绘，确保 onDraw 在下一次布局循环中被调用
+            Log.d("【SELECT_LOG】", "attachToWindow: addView 成功, windowPos=(${params.x},${params.y}), screen=${screenWidth}x${screenHeight}")
             invalidate()
-            // 跨线程重绘兜底：确保即使主线程繁忙也能触发绘制
             postInvalidate()
 
             // 延迟检视：1 秒后检查 onAttachedToWindow 是否触发
-            // 若未触发，说明系统异步拒绝了窗口创建，尝试重建
             Handler(Looper.getMainLooper()).postDelayed({
                 if (isAttached && !attachedCallbackReceived) {
                     Log.w("【SELECT_LOG】", "attachToWindow: 延迟检查发现 onAttachedToWindow 未触发，系统可能异步拒绝了窗口，尝试重建")
-                    // 移除旧视图
                     try { windowManager.removeView(this@FloatSelectOverlay) } catch (_: Exception) {}
                     isAttached = false
-                    // 延迟 100ms 后重新添加
                     Handler(Looper.getMainLooper()).postDelayed({
                         doAttach(params)
                     }, 100)
@@ -818,6 +844,28 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
             // 已移除，忽略
         }
         isAttached = false
+    }
+
+    /**
+     * 拖拽/缩放手势结束后，更新窗口位置以匹配选区新位置。
+     * 窗口位置始终等于选区左上角（selectionRect.left, selectionRect.top）。
+     */
+    private fun updateWindowPosition() {
+        val params = windowParams ?: return
+        val newX = selectionRect.left.toInt()
+        val newY = selectionRect.top.toInt()
+        if (params.x != newX || params.y != newY) {
+            params.x = newX
+            params.y = newY
+            windowOffsetX = newX
+            windowOffsetY = newY
+            try {
+                windowManager.updateViewLayout(this, params)
+                Log.d("【SELECT_LOG】", "updateWindowPosition: 窗口位置已更新到 ($newX, $newY)")
+            } catch (e: Exception) {
+                Log.e("【SELECT_LOG】", "updateWindowPosition 异常: ${e.message}", e)
+            }
+        }
     }
 
     /**
