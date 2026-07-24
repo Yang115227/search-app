@@ -373,10 +373,10 @@ object FloatWindowManager {
      * 如果当前已有选题框，不会重复创建。
      *
      * @param context 上下文（建议传 Activity 或 Service）
-     * @param onSearch 搜索回调，用户点击"开始搜题"后触发，进入连续搜题模式后每次轮询也会触发
      * @param onOverlayAttached 选区悬浮窗已挂载到 WindowManager 的回调（onAttachedToWindow 触发）
+     * @param onSearch 搜索回调，用户点击"开始搜题"后触发，进入连续搜题模式后每次轮询也会触发
      */
-    fun showSelectOverlay(context: Context, onSearch: (Rect) -> Unit, onOverlayAttached: (() -> Unit)? = null) {
+    fun showSelectOverlay(context: Context, onOverlayAttached: (() -> Unit)? = null, onSearch: (Rect) -> Unit) {
         val ctx = context.applicationContext
         Log.d("【SELECT_LOG】", "showSelectOverlay 入口: mode=${currentSearchMode} state=${currentState} activeMode=${activeMode}")
 
