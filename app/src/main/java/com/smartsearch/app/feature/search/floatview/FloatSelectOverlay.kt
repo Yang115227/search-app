@@ -371,9 +371,9 @@ class FloatSelectOverlay(private val context: Context) : View(context) {
      */
     private fun calcViewExtent(): Pair<Int, Int> {
         val extraLeft = (closeButtonRadius * 0.3f).toInt()
-        val extraTop = (closeButtonRadius * 0.3f + closeButtonRadius + 4f.dp()).toInt()
-        val extraRight = (resizeHandleSize + 4f.dp()).toInt()
-        val extraBottom = (confirmButtonMargin + confirmButtonHeight + 20f.dp()).toInt()
+        val extraTop = (closeButtonRadius * 0.3f + closeButtonRadius + 4f.dp(4f)).toInt()
+        val extraRight = (resizeHandleSize + 4f.dp(4f)).toInt()
+        val extraBottom = (confirmButtonMargin + confirmButtonHeight + 20f.dp(20f)).toInt()
         val w = selectionRect.width().toInt() + extraLeft + extraRight
         val h = selectionRect.height().toInt() + extraTop + extraBottom
         return Pair(w, h)
